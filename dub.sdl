@@ -1,0 +1,13 @@
+name "wasmtime-d"
+description "D language binding for wasmtime"
+authors "ZILtoid1991"
+copyright "Copyright © 2024, ZILtoid1991"
+license "Boost"
+targetType "library"
+dependency "bindbc-loader" version="*"
+subPackage {
+    name "funcgen"
+    targetType "executable"
+    sourcePaths "./funcgen/"
+    importPaths "./funcgen/"
+}
