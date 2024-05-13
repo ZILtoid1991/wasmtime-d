@@ -11,3 +11,10 @@ subPackage {
     sourcePaths "./funcgen/"
     importPaths "./funcgen/"
 }
+subPackage {
+    name "test_loader"
+    dependency "wasmtime-d" version="*"
+    targetType "executable"
+    sourcePaths "./test_loader/"
+    importPaths "./test_loader/"
+}

@@ -9,9 +9,16 @@ alias byte_t = char;
 alias float32_t = float;
 alias float64_t = double;
 
-//not found in the original specs, added by me since it's a very common thing
-
-alias wasmFinalizerFuncT = extern(C) void function(void*);
+///Not found in the original specs, added by me since it's a very common thing in the library.
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
+alias wasmFinalizerFuncT = extern(C) nothrow void function(void*);
+///Not found in original specs, added in order to get around issues of the D compiler not liking this long definition
+///inside another function pointer. Used in function `wasmtime_store_epoch_deadline_callback()`.
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
+alias wasmSEDCFuncT = extern(C) nothrow wasmtime_error_t* function(wasmtime_context_t* context, void* data, 
+        uint64_t* epoch_deadline_delta, wasmtime_update_deadline_kind_t* update_kind);
 
 alias wasm_byte_t = byte_t;
 
@@ -52,7 +59,7 @@ struct wasm_valtype_vec_t {
 
 alias wasm_valkind_t = uint8_t;
 
-enum wasm_valkind_enum {
+enum wasm_valkind_enum : wasm_valkind_t {
     WASM_I32,
     WASM_I64,
     WASM_F32,
@@ -123,13 +130,14 @@ struct wasm_ref_t {}
 
 struct wasm_val_t {
     wasm_valkind_t kind;
-    union of {
+    union OF {
         int32_t i32;
         int64_t i64;
         float32_t f32;
         float64_t f64;
         wasm_ref_t* _ref;
     }
+    OF of;
 }
 
 struct wasm_val_vec_t { 
@@ -153,10 +161,14 @@ struct wasm_foreign_t {}
 struct wasm_module_t {}
 
 struct wasm_func_t {}
-
-alias wasm_func_callback_t = extern(C) wasm_trap_t* function(const(wasm_val_vec_t)* args, wasm_val_vec_t* results);
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
+alias wasm_func_callback_t = 
+        extern(C) nothrow wasm_trap_t* function(const(wasm_val_vec_t)* args, wasm_val_vec_t* results);
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
 alias wasm_func_callback_with_env_t = 
-        extern(C) wasm_trap_t* function(void* env, const(wasm_val_vec_t)* args, wasm_val_vec_t* results);
+        extern(C) nothrow wasm_trap_t* function(void* env, const(wasm_val_vec_t)* args, wasm_val_vec_t* results);
 
 struct wasm_global_t {}
 
@@ -206,11 +218,13 @@ enum wasmtime_profiling_strategy_enum : wasmtime_profiling_strategy_t {
     WASMTIME_PROFILING_STRATEGY_VTUNE,
     WASMTIME_PROFILING_STRATEGY_PERFMAP,
 }
-
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
 alias wasmtime_memory_get_callback_t = 
-        extern(C) uint8_t* function(void* env, size_t* byte_size, size_t* maximum_byte_size);
-
-alias wasmtime_memory_grow_callback_t = extern(C) wasmtime_error_t* function(void* env, size_t new_size);
+        extern(C) nothrow uint8_t* function(void* env, size_t* byte_size, size_t* maximum_byte_size);
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
+alias wasmtime_memory_grow_callback_t = extern(C) nothrow wasmtime_error_t* function(void* env, size_t new_size);
 
 struct wasmtime_linear_memory_t {
     void* env;
@@ -219,10 +233,11 @@ struct wasmtime_linear_memory_t {
     //extern(C) void function(void*) finalizer;
     wasmFinalizerFuncT finalizer;
 }
-
-alias wasmtime_new_memory_callback_t = extern(C) wasmtime_error_t* function(void* env, const(wasm_memorytype_t*) ty, 
-    size_t minimum, size_t maximum, size_t reserved_size_in_bytes, size_t guard_size_in_bytes, 
-    wasmtime_linear_memory_t* memory_ret);
+///Note: Handle any potential exceptions on D side, let's not make issues from throwing in these kind of functions towards
+///code that isn't equiped to handle it!
+alias wasmtime_new_memory_callback_t = extern(C) nothrow wasmtime_error_t* function(void* env, 
+    const(wasm_memorytype_t*) ty, size_t minimum, size_t maximum, size_t reserved_size_in_bytes, 
+    size_t guard_size_in_bytes, wasmtime_linear_memory_t* memory_ret);
 
 struct wasmtime_memory_creator_t {
     void* env;

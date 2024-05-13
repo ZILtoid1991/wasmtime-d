@@ -1,7 +1,5 @@
 module wasmtime;
 
-
-
 /**
  * \brief Wasmtime version string.
  */

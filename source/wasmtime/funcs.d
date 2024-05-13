@@ -5,7 +5,7 @@ public import core.stdc.stdint;
 
 import bindbc.loader;
 
-extern(C) { 
+extern(C) @nogc nothrow { 
     alias pwasm_byte_vec_new_empty = void function(wasm_byte_vec_t* _out);
     alias pwasm_byte_vec_new_uninitialized = void function(wasm_byte_vec_t* _out, size_t); 
     alias pwasm_byte_vec_new = void function(wasm_byte_vec_t* _out, size_t, const(wasm_byte_t)*); 
@@ -295,8 +295,8 @@ extern(C) {
     alias pwasi_config_set_stdin_file = bool function(wasi_config_t* config, const(char)* path);
     alias pwasi_config_set_stdin_bytes = void function(wasi_config_t* config, wasm_byte_vec_t* binary);
     alias pwasi_config_inherit_stdin = void function(wasi_config_t* config);
-    alias pwasi_config_set_std_out_file = bool function(wasi_config_t* config, const(char)* path);
-    alias pwasi_config_inherit_std_out = void function(wasi_config_t* config);
+    alias pwasi_config_set_stdout_file = bool function(wasi_config_t* config, const(char)* path);
+    alias pwasi_config_inherit_stdout = void function(wasi_config_t* config);
     alias pwasi_config_set_stderr_file = bool function(wasi_config_t* config, const(char)* path);
     alias pwasi_config_inherit_stderr = void function(wasi_config_t* config);
     alias pwasi_config_preopen_dir = bool function(wasi_config_t *config, const(char)* path, const(char)* guest_path);
@@ -370,7 +370,7 @@ extern(C) {
     alias pwasmtime_context_get_fuel = wasmtime_error_t* function(const(wasmtime_context_t)* context, uint64_t* fuel);
     alias pwasmtime_context_set_wasi = wasmtime_error_t* function(wasmtime_context_t* context, wasi_config_t* wasi);
     alias pwasmtime_context_set_epoch_deadline = void function(wasmtime_context_t* context, uint64_t ticks_beyond_current);
-    alias pwasmtime_store_epoch_deadline_callback = void function(wasmtime_store_t* store, /* extern(C) */ wasmtime_error_t* function(wasmtime_context_t* context, void* data, uint64_t* epoch_deadline_delta, wasmtime_update_deadline_kind_t* update_kind) func, void *data, wasmFinalizerFuncT);
+    alias pwasmtime_store_epoch_deadline_callback = void function(wasmtime_store_t* store, wasmSEDCFuncT func /* extern(C) wasmtime_error_t* function(wasmtime_context_t* context, void* data, uint64_t* epoch_deadline_delta, wasmtime_update_deadline_kind_t* update_kind) func */, void *data, wasmFinalizerFuncT);
     alias pwasmtime_extern_delete = void function(wasmtime_extern_t* val);
     alias pwasmtime_extern_type = wasm_externtype_t* function(wasmtime_context_t* context, wasmtime_extern_t* val);
     alias pwasmtime_anyref_clone = wasmtime_anyref_t* function(wasmtime_context_t* context, wasmtime_anyref_t* _ref);
@@ -749,8 +749,8 @@ __gshared {
     pwasi_config_set_stdin_file wasi_config_set_stdin_file;
     pwasi_config_set_stdin_bytes wasi_config_set_stdin_bytes;
     pwasi_config_inherit_stdin wasi_config_inherit_stdin;
-    pwasi_config_set_std_out_file wasi_config_set_std_out_file;
-    pwasi_config_inherit_std_out wasi_config_inherit_std_out;
+    pwasi_config_set_stdout_file wasi_config_set_stdout_file;
+    pwasi_config_inherit_stdout wasi_config_inherit_stdout;
     pwasi_config_set_stderr_file wasi_config_set_stderr_file;
     pwasi_config_inherit_stderr wasi_config_inherit_stderr;
     pwasi_config_preopen_dir wasi_config_preopen_dir;
@@ -913,7 +913,7 @@ __gshared {
     pwasmtime_config_host_stack_creator_set wasmtime_config_host_stack_creator_set;
     pwasmtime_wat2wasm wasmtime_wat2wasm;
 }
-package void loadFuncs(SharedLib lib) { 
+package void loadFuncs(SharedLib lib, bool min = false) { 
     bindSymbol_stdcall(lib, wasm_byte_vec_new_empty, "wasm_byte_vec_new_empty");
     bindSymbol_stdcall(lib, wasm_byte_vec_new_uninitialized, "wasm_byte_vec_new_uninitialized");
     bindSymbol_stdcall(lib, wasm_byte_vec_new, "wasm_byte_vec_new");
@@ -1194,20 +1194,22 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasm_ref_as_instance_const, "wasm_ref_as_instance_const");
     bindSymbol_stdcall(lib, wasm_instance_new, "wasm_instance_new");
     bindSymbol_stdcall(lib, wasm_instance_exports, "wasm_instance_exports");
-    bindSymbol_stdcall(lib, wasi_config_delete, "wasi_config_delete");
-    bindSymbol_stdcall(lib, wasi_config_new, "wasi_config_new");
-    bindSymbol_stdcall(lib, wasi_config_set_argv, "wasi_config_set_argv");
-    bindSymbol_stdcall(lib, wasi_config_inherit_argv, "wasi_config_inherit_argv");
-    bindSymbol_stdcall(lib, wasi_config_set_env, "wasi_config_set_env");
-    bindSymbol_stdcall(lib, wasi_config_inherit_env, "wasi_config_inherit_env");
-    bindSymbol_stdcall(lib, wasi_config_set_stdin_file, "wasi_config_set_stdin_file");
-    bindSymbol_stdcall(lib, wasi_config_set_stdin_bytes, "wasi_config_set_stdin_bytes");
-    bindSymbol_stdcall(lib, wasi_config_inherit_stdin, "wasi_config_inherit_stdin");
-    bindSymbol_stdcall(lib, wasi_config_set_std_out_file, "wasi_config_set_std_out_file");
-    bindSymbol_stdcall(lib, wasi_config_inherit_std_out, "wasi_config_inherit_std_out");
-    bindSymbol_stdcall(lib, wasi_config_set_stderr_file, "wasi_config_set_stderr_file");
-    bindSymbol_stdcall(lib, wasi_config_inherit_stderr, "wasi_config_inherit_stderr");
-    bindSymbol_stdcall(lib, wasi_config_preopen_dir, "wasi_config_preopen_dir");
+    if (!min) {
+        bindSymbol_stdcall(lib, wasi_config_delete, "wasi_config_delete");
+        bindSymbol_stdcall(lib, wasi_config_new, "wasi_config_new");
+        bindSymbol_stdcall(lib, wasi_config_set_argv, "wasi_config_set_argv");
+        bindSymbol_stdcall(lib, wasi_config_inherit_argv, "wasi_config_inherit_argv");
+        bindSymbol_stdcall(lib, wasi_config_set_env, "wasi_config_set_env");
+        bindSymbol_stdcall(lib, wasi_config_inherit_env, "wasi_config_inherit_env");
+        bindSymbol_stdcall(lib, wasi_config_set_stdin_file, "wasi_config_set_stdin_file");
+        bindSymbol_stdcall(lib, wasi_config_set_stdin_bytes, "wasi_config_set_stdin_bytes");
+        bindSymbol_stdcall(lib, wasi_config_inherit_stdin, "wasi_config_inherit_stdin");
+        bindSymbol_stdcall(lib, wasi_config_set_stdout_file, "wasi_config_set_stdout_file");
+        bindSymbol_stdcall(lib, wasi_config_inherit_stdout, "wasi_config_inherit_stdout");
+        bindSymbol_stdcall(lib, wasi_config_set_stderr_file, "wasi_config_set_stderr_file");
+        bindSymbol_stdcall(lib, wasi_config_inherit_stderr, "wasi_config_inherit_stderr");
+        bindSymbol_stdcall(lib, wasi_config_preopen_dir, "wasi_config_preopen_dir");
+    }
     bindSymbol_stdcall(lib, wasmtime_error_new, "wasmtime_error_new");
     bindSymbol_stdcall(lib, wasmtime_error_delete, "wasmtime_error_delete");
     bindSymbol_stdcall(lib, wasmtime_error_message, "wasmtime_error_message");
@@ -1217,7 +1219,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_config_consume_fuel_set, "wasmtime_config_consume_fuel_set");
     bindSymbol_stdcall(lib, wasmtime_config_epoch_interruption_set, "wasmtime_config_epoch_interruption_set");
     bindSymbol_stdcall(lib, wasmtime_config_max_wasm_stack_set, "wasmtime_config_max_wasm_stack_set");
-    bindSymbol_stdcall(lib, wasmtime_config_wasm_threads_set, "wasmtime_config_wasm_threads_set");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_config_wasm_threads_set, "wasmtime_config_wasm_threads_set");
     bindSymbol_stdcall(lib, wasmtime_config_wasm_tail_call_set, "wasmtime_config_wasm_tail_call_set");
     bindSymbol_stdcall(lib, wasmtime_config_wasm_reference_types_set, "wasmtime_config_wasm_reference_types_set");
     bindSymbol_stdcall(lib, wasmtime_config_wasm_function_references_set, "wasmtime_config_wasm_function_references_set");
@@ -1230,7 +1232,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_config_wasm_multi_memory_set, "wasmtime_config_wasm_multi_memory_set");
     bindSymbol_stdcall(lib, wasmtime_config_wasm_memory64_set, "wasmtime_config_wasm_memory64_set");
     bindSymbol_stdcall(lib, wasmtime_config_strategy_set, "wasmtime_config_strategy_set");
-    bindSymbol_stdcall(lib, wasmtime_config_parallel_compilation_set, "wasmtime_config_parallel_compilation_set");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_config_parallel_compilation_set, "wasmtime_config_parallel_compilation_set");
     bindSymbol_stdcall(lib, wasmtime_config_cranelift_debug_verifier_set, "wasmtime_config_cranelift_debug_verifier_set");
     bindSymbol_stdcall(lib, wasmtime_config_cranelift_nan_canonicalization_set, "wasmtime_config_cranelift_nan_canonicalization_set");
     bindSymbol_stdcall(lib, wasmtime_config_cranelift_opt_level_set, "wasmtime_config_cranelift_opt_level_set");
@@ -1241,7 +1243,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_config_dynamic_memory_guard_size_set, "wasmtime_config_dynamic_memory_guard_size_set");
     bindSymbol_stdcall(lib, wasmtime_config_dynamic_memory_reserved_for_growth_set, "wasmtime_config_dynamic_memory_reserved_for_growth_set");
     bindSymbol_stdcall(lib, wasmtime_config_native_unwind_info_set, "wasmtime_config_native_unwind_info_set");
-    bindSymbol_stdcall(lib, wasmtime_config_cache_config_load, "wasmtime_config_cache_config_load");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_config_cache_config_load, "wasmtime_config_cache_config_load");
     bindSymbol_stdcall(lib, wasmtime_config_target_set, "wasmtime_config_target_set");
     bindSymbol_stdcall(lib, wasmtime_config_cranelift_flag_enable, "wasmtime_config_cranelift_flag_enable");
     bindSymbol_stdcall(lib, wasmtime_config_cranelift_flag_set, "wasmtime_config_cranelift_flag_set");
@@ -1259,7 +1261,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_module_deserialize, "wasmtime_module_deserialize");
     bindSymbol_stdcall(lib, wasmtime_module_deserialize_file, "wasmtime_module_deserialize_file");
     bindSymbol_stdcall(lib, wasmtime_module_image_range, "wasmtime_module_image_range");
-    bindSymbol_stdcall(lib, wasmtime_sharedmemory_new, "wasmtime_sharedmemory_new");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_sharedmemory_new, "wasmtime_sharedmemory_new");
     bindSymbol_stdcall(lib, wasmtime_sharedmemory_delete, "wasmtime_sharedmemory_delete");
     bindSymbol_stdcall(lib, wasmtime_sharedmemory_clone, "wasmtime_sharedmemory_clone");
     bindSymbol_stdcall(lib, wasmtime_sharedmemory_type, "wasmtime_sharedmemory_type");
@@ -1276,7 +1278,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_context_gc, "wasmtime_context_gc");
     bindSymbol_stdcall(lib, wasmtime_context_set_fuel, "wasmtime_context_set_fuel");
     bindSymbol_stdcall(lib, wasmtime_context_get_fuel, "wasmtime_context_get_fuel");
-    bindSymbol_stdcall(lib, wasmtime_context_set_wasi, "wasmtime_context_set_wasi");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_context_set_wasi, "wasmtime_context_set_wasi");
     bindSymbol_stdcall(lib, wasmtime_context_set_epoch_deadline, "wasmtime_context_set_epoch_deadline");
     bindSymbol_stdcall(lib, wasmtime_store_epoch_deadline_callback, "wasmtime_store_epoch_deadline_callback");
     bindSymbol_stdcall(lib, wasmtime_extern_delete, "wasmtime_extern_delete");
@@ -1322,7 +1324,7 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_linker_define, "wasmtime_linker_define");
     bindSymbol_stdcall(lib, wasmtime_linker_define_func, "wasmtime_linker_define_func");
     bindSymbol_stdcall(lib, wasmtime_linker_define_func_unchecked, "wasmtime_linker_define_func_unchecked");
-    bindSymbol_stdcall(lib, wasmtime_linker_define_wasi, "wasmtime_linker_define_wasi");
+    if (!min) bindSymbol_stdcall(lib, wasmtime_linker_define_wasi, "wasmtime_linker_define_wasi");
     bindSymbol_stdcall(lib, wasmtime_linker_define_instance, "wasmtime_linker_define_instance");
     bindSymbol_stdcall(lib, wasmtime_linker_instantiate, "wasmtime_linker_instantiate");
     bindSymbol_stdcall(lib, wasmtime_linker_module, "wasmtime_linker_module");
@@ -1340,10 +1342,12 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_memory_data_size, "wasmtime_memory_data_size");
     bindSymbol_stdcall(lib, wasmtime_memory_size, "wasmtime_memory_size");
     bindSymbol_stdcall(lib, wasmtime_memory_grow, "wasmtime_memory_grow");
-    bindSymbol_stdcall(lib, wasmtime_guestprofiler_delete, "wasmtime_guestprofiler_delete");
-    bindSymbol_stdcall(lib, wasmtime_guestprofiler_new, "wasmtime_guestprofiler_new");
-    bindSymbol_stdcall(lib, wasmtime_guestprofiler_sample, "wasmtime_guestprofiler_sample");
-    bindSymbol_stdcall(lib, wasmtime_guestprofiler_finish, "wasmtime_guestprofiler_finish");
+    if (!min) {
+        bindSymbol_stdcall(lib, wasmtime_guestprofiler_delete, "wasmtime_guestprofiler_delete");
+        bindSymbol_stdcall(lib, wasmtime_guestprofiler_new, "wasmtime_guestprofiler_new");
+        bindSymbol_stdcall(lib, wasmtime_guestprofiler_sample, "wasmtime_guestprofiler_sample");
+        bindSymbol_stdcall(lib, wasmtime_guestprofiler_finish, "wasmtime_guestprofiler_finish");
+    }
     bindSymbol_stdcall(lib, wasmtime_table_new, "wasmtime_table_new");
     bindSymbol_stdcall(lib, wasmtime_table_type, "wasmtime_table_type");
     bindSymbol_stdcall(lib, wasmtime_table_get, "wasmtime_table_get");
@@ -1354,16 +1358,18 @@ package void loadFuncs(SharedLib lib) {
     bindSymbol_stdcall(lib, wasmtime_trap_code, "wasmtime_trap_code");
     bindSymbol_stdcall(lib, wasmtime_frame_func_name, "wasmtime_frame_func_name");
     bindSymbol_stdcall(lib, wasmtime_frame_module_name, "wasmtime_frame_module_name");
-    bindSymbol_stdcall(lib, wasmtime_config_async_support_set, "wasmtime_config_async_support_set");
-    bindSymbol_stdcall(lib, wasmtime_config_async_stack_size_set, "wasmtime_config_async_stack_size_set");
-    bindSymbol_stdcall(lib, wasmtime_context_fuel_async_yield_interval, "wasmtime_context_fuel_async_yield_interval");
-    bindSymbol_stdcall(lib, wasmtime_context_epoch_deadline_async_yield_and_update, "wasmtime_context_epoch_deadline_async_yield_and_update");
-    bindSymbol_stdcall(lib, wasmtime_call_future_poll, "wasmtime_call_future_poll");
-    bindSymbol_stdcall(lib, wasmtime_call_future_delete, "wasmtime_call_future_delete");
-    bindSymbol_stdcall(lib, wasmtime_func_call_async, "wasmtime_func_call_async");
-    bindSymbol_stdcall(lib, wasmtime_linker_define_async_func, "wasmtime_linker_define_async_func");
-    bindSymbol_stdcall(lib, wasmtime_linker_instantiate_async, "wasmtime_linker_instantiate_async");
-    bindSymbol_stdcall(lib, wasmtime_instance_pre_instantiate_async, "wasmtime_instance_pre_instantiate_async");
-    bindSymbol_stdcall(lib, wasmtime_config_host_stack_creator_set, "wasmtime_config_host_stack_creator_set");
-    bindSymbol_stdcall(lib, wasmtime_wat2wasm, "wasmtime_wat2wasm");
+    if (!min) {
+        bindSymbol_stdcall(lib, wasmtime_config_async_support_set, "wasmtime_config_async_support_set");
+        bindSymbol_stdcall(lib, wasmtime_config_async_stack_size_set, "wasmtime_config_async_stack_size_set");
+        bindSymbol_stdcall(lib, wasmtime_context_fuel_async_yield_interval, "wasmtime_context_fuel_async_yield_interval");
+        bindSymbol_stdcall(lib, wasmtime_context_epoch_deadline_async_yield_and_update, "wasmtime_context_epoch_deadline_async_yield_and_update");
+        bindSymbol_stdcall(lib, wasmtime_call_future_poll, "wasmtime_call_future_poll");
+        bindSymbol_stdcall(lib, wasmtime_call_future_delete, "wasmtime_call_future_delete");
+        bindSymbol_stdcall(lib, wasmtime_func_call_async, "wasmtime_func_call_async");
+        bindSymbol_stdcall(lib, wasmtime_linker_define_async_func, "wasmtime_linker_define_async_func");
+        bindSymbol_stdcall(lib, wasmtime_linker_instantiate_async, "wasmtime_linker_instantiate_async");
+        bindSymbol_stdcall(lib, wasmtime_instance_pre_instantiate_async, "wasmtime_instance_pre_instantiate_async");
+        bindSymbol_stdcall(lib, wasmtime_config_host_stack_creator_set, "wasmtime_config_host_stack_creator_set");
+        bindSymbol_stdcall(lib, wasmtime_wat2wasm, "wasmtime_wat2wasm");
+    }
 }
