@@ -46,115 +46,115 @@ class WasmConfig {
     ~this() @nogc nothrow {
         wasm_config_delete(backend);
     }
-    void debug_info_set(bool b) @nogc nothrow {
+    void debugInfoSet(bool b) @nogc nothrow {
         wasmtime_config_debug_info_set(backend, b);
     }
-    void consume_fuel_set(bool b) @nogc nothrow {
+    void consumeFuelSet(bool b) @nogc nothrow {
         wasmtime_config_consume_fuel_set(backend, b);
     }
-    void epoch_interruption_set(bool b) @nogc nothrow {
+    void epochInterruptionSet(bool b) @nogc nothrow {
         wasmtime_config_epoch_interruption_set(backend, b);
     }
-    void max_wasm_stack_set(bool b) @nogc nothrow {
+    void maxWasmStackSet(bool b) @nogc nothrow {
         wasmtime_config_max_wasm_stack_set(backend, b);
     }
-    void wasm_threads_set(bool b) @nogc nothrow {
+    void wasmThreadsSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_threads_set(backend, b);
     }
-    void wasm_tail_call_set(bool b) @nogc nothrow {
+    void wasmTailCallSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_tail_call_set(backend, b);
     }
-    void wasm_reference_types_set(bool b) @nogc nothrow {
+    void wasmReferenceTypesSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_reference_types_set(backend, b);
     }
-    void wasm_function_references_set(bool b) @nogc nothrow {
+    void wasmFunctionReferencesSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_function_references_set(backend, b);
     }
-    void wasm_gc_set(bool b) @nogc nothrow {
+    void wasmGCSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_gc_set(backend, b);
     }
-    void wasm_simd_set(bool b) @nogc nothrow {
+    void wasmSIMDSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_simd_set(backend, b);
     }
-    void wasm_relaxed_simd_set(bool b) @nogc nothrow {
+    void wasmRelaxedSIMDSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_relaxed_simd_set(backend, b);
     }
-    void wasm_relaxed_simd_deterministic_set(bool b) @nogc nothrow {
+    void wasmRelaxedSIMDdeterministicSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_relaxed_simd_deterministic_set(backend, b);
     }
-    void wasm_bulk_memory_set(bool b) @nogc nothrow {
+    void wasmBulkMemorySet(bool b) @nogc nothrow {
         wasmtime_config_wasm_bulk_memory_set(backend, b);
     }
-    void wasm_multi_value_set(bool b) @nogc nothrow {
+    void wasmMultiValueSet(bool b) @nogc nothrow {
         wasmtime_config_wasm_multi_value_set(backend, b);
     }
-    void wasm_multi_memory_set(bool b) @nogc nothrow {
+    void wasmMultiMemorySet(bool b) @nogc nothrow {
         wasmtime_config_wasm_multi_memory_set(backend, b);
     }
-    void wasm_memory64_set(bool b) @nogc nothrow {
+    void wasmMemory64Set(bool b) @nogc nothrow {
         wasmtime_config_wasm_memory64_set(backend, b);
     }
-    void strategy_set(wasmtime_strategy_t strategy) @nogc nothrow {
+    void strategySet(wasmtime_strategy_t strategy) @nogc nothrow {
         wasmtime_config_strategy_set(backend, strategy);
     }
-    void parallel_compilation_set(bool b) @nogc nothrow {
+    void parallelCompilationSet(bool b) @nogc nothrow {
         wasmtime_config_parallel_compilation_set(backend, b);
     }
-    void cranelift_debug_verifier_set(bool b) @nogc nothrow {
+    void craneliftDebugVerifierSet(bool b) @nogc nothrow {
         wasmtime_config_cranelift_debug_verifier_set(backend, b);
     }
-    void cranelift_nan_canonicalization_set(bool b) @nogc nothrow {
+    void craneliftNANCanonicalizationSet(bool b) @nogc nothrow {
         wasmtime_config_cranelift_nan_canonicalization_set(backend, b);
     }
-    void cranelift_opt_level_set(wasmtime_opt_level_t optLevel) @nogc nothrow {
+    void craneliftOptLevelSet(wasmtime_opt_level_t optLevel) @nogc nothrow {
         wasmtime_config_cranelift_opt_level_set(backend, optLevel);
     }
-    void profiler_set(wasmtime_profiling_strategy_t profiling) @nogc nothrow {
+    void profilerSet(wasmtime_profiling_strategy_t profiling) @nogc nothrow {
         wasmtime_config_profiler_set(backend, profiling);
     }
-    void static_memory_forced_set(bool b) @nogc nothrow {
+    void staticMemoryForcedSet(bool b) @nogc nothrow {
         wasmtime_config_static_memory_forced_set(backend, b);
     }
-    void static_memory_maximum_size_set(uint64_t maxMem) @nogc nothrow {
+    void staticMemoryMaximumSizeSet(uint64_t maxMem) @nogc nothrow {
         wasmtime_config_static_memory_maximum_size_set(backend, maxMem);
     }
-    void static_memory_guard_size_set(uint64_t stMem) @nogc nothrow {
+    void staticMemoryGuardSizeSet(uint64_t stMem) @nogc nothrow {
         wasmtime_config_static_memory_guard_size_set(backend, stMem);
     }
-    void dynamic_memory_guard_size_set(uint64_t dynMem) @nogc nothrow {
+    void dynamicMemoryGuardSizeSet(uint64_t dynMem) @nogc nothrow {
         wasmtime_config_dynamic_memory_guard_size_set(backend, dynMem);
     }
-    void dynamic_memory_reserved_for_growth_set(uint64_t memSize) @nogc nothrow {
+    void dynamicMemoryReservedFforGrowthSet(uint64_t memSize) @nogc nothrow {
         wasmtime_config_dynamic_memory_reserved_for_growth_set(backend, memSize);
     }
-    void native_unwind_info_set(bool b) @nogc nothrow {
+    void nativeUnwindInfoSet(bool b) @nogc nothrow {
         wasmtime_config_native_unwind_info_set(backend, b);
     }
-    void cache_config_load(const(char)* config) @nogc nothrow {
+    void cacheConfigLoad(const(char)* config) @nogc nothrow {
         wasmtime_config_cache_config_load(backend, config);
     }
-    void target_set(const(char)* config) @nogc nothrow {
+    void targetSet(const(char)* config) @nogc nothrow {
         wasmtime_config_target_set(backend, config);
     }
-    void cranelift_flag_enable(const(char)* config) @nogc nothrow {
+    void craneliftFlagEnable(const(char)* config) @nogc nothrow {
         wasmtime_config_cranelift_flag_enable(backend, config);
     }
-    void cranelift_flag_set(const(char)* key, const(char)* value) @nogc nothrow {
+    void craneliftFlagSet(const(char)* key, const(char)* value) @nogc nothrow {
         wasmtime_config_cranelift_flag_set(backend, key, value);
     }
-    void macos_use_mach_ports_set(bool b) @nogc nothrow {
+    void macosUseMachPortsSet(bool b) @nogc nothrow {
         wasmtime_config_macos_use_mach_ports_set(backend, b);
     }
-    void host_memory_creator_set(wasmtime_memory_creator_t* memCreator) @nogc nothrow {
+    void hostMemoryCreatorSet(wasmtime_memory_creator_t* memCreator) @nogc nothrow {
         wasmtime_config_host_memory_creator_set(backend, memCreator);
     }
-    void memory_init_cow_set(bool b) @nogc nothrow {
+    void memoryInitCOWSet(bool b) @nogc nothrow {
         wasmtime_config_memory_init_cow_set(backend, b);
     }
-    void async_support_set(bool b) @nogc nothrow {
+    void asyncSupportSet(bool b) @nogc nothrow {
         wasmtime_config_async_support_set(backend, b);
     }
-    void async_stack_size_set(uint64_t size) @nogc nothrow {
+    void asyncStackSizeSet(uint64_t size) @nogc nothrow {
         wasmtime_config_async_stack_size_set(backend, size);
     }
 }
