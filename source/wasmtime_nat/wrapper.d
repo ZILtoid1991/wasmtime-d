@@ -307,3 +307,103 @@ class WasmFunctypeVec {
         return value;
     }
 }
+class WasmGlobaltype {
+    wasm_globaltype_t* backend;
+    bool isInternalRef;
+    this(WasmValtype type, wasm_mutability_t mutability) @nogc nothrow {
+        backend = wasm_globaltype_new(type.backend, mutability);
+    }
+    this(wasm_valtype_t* type, wasm_mutability_t mutability) @nogc nothrow {
+        backend = wasm_globaltype_new(type, mutability);
+    }
+    this(WasmGlobaltype other) @nogc nothrow {
+        backend = wasm_globaltype_copy(other.backend);
+    }
+    ~this() {
+        if (!isInternalRef) wasm_globaltype_delete(backend);
+    }
+    WasmValtype content() nothrow {
+        return new WasmValtype(cast(wasm_valtype_t*)wasm_globaltype_content(backend));
+    }
+    wasm_mutability_t mutability() @nogc nothrow {
+        return wasm_globaltype_mutability(backend);
+    }
+}
+class WasmGlobaltypeVec {
+    wasm_globaltype_vec_t backend;
+    this(wasm_globaltype_vec_t backend) @nogc nothrow @safe {
+        this.backend = backend;
+    }
+    this() @nogc nothrow {
+        wasm_globaltype_vec_new_empty(&backend);
+    }
+    this(size_t size) @nogc nothrow {
+        wasm_globaltype_vec_new_uninitialized(&backend, size);
+    }
+    this(wasm_globaltype_t*[] arr) @nogc nothrow {
+        wasm_globaltype_vec_new(&backend, arr.sizeof, arr.ptr);
+    }
+    this(WasmFunctypeVec other) @nogc nothrow {
+        wasm_globaltype_vec_copy(&backend, &other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasm_globaltype_vec_delete(&backend);
+    }
+    WasmGlobaltype opIndex(size_t index) nothrow const {
+        return new WasmGlobaltype(backend.data[index]);
+    }
+    WasmGlobaltype opIndexAssign(WasmGlobaltype value, size_t index) nothrow {
+        backend.data[index] = value.backend;
+        value.isInternalRef = true;
+        return value;
+    }
+}
+alias WasmLimits = wasm_limits_t;
+class WasmTabletype {
+    wasm_tabletype_t* backend;
+    bool isInternalRef;
+    this(WasmValtype type, const WasmLimits limits) @nogc nothrow {
+        backend = wasm_tabletype_new(type.backend, limits);
+    }
+    this(WasmTabletype other) @nogc nothrow {
+        backend = wasm_tabletype_copy(other.backend);
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasm_tabletype_delete(backend);
+    }
+    WasmValtype element() nothrow {
+        return new WasmValtype(wasm_tabletype_element(backend));
+    }
+    const(WasmLimits) limits() @nogc nothrow {
+        return *wasm_tabletype_limits(backend);
+    }
+}
+class WasmTabletypeVec {
+    wasm_tabletype_vec_t backend;
+    this(wasm_tabletype_vec_t backend) @nogc nothrow @safe {
+        this.backend = backend;
+    }
+    this() @nogc nothrow {
+        wasm_tabletype_vec_new_empty(&backend);
+    }
+    this(size_t size) @nogc nothrow {
+        wasm_tabletype_vec_new_uninitialized(&backend, size);
+    }
+    this(wasm_tabletype_t*[] arr) @nogc nothrow {
+        wasm_tabletype_vec_new(&backend, arr.sizeof, arr.ptr);
+    }
+    this(WasmFunctypeVec other) @nogc nothrow {
+        wasm_tabletype_vec_copy(&backend, &other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasm_tabletype_vec_delete(&backend);
+    }
+    WasmGlobaltype opIndex(size_t index) nothrow const {
+        return new WasmTabletype(backend.data[index]);
+    }
+    WasmTabletype opIndexAssign(WasmTabletype value, size_t index) nothrow {
+        backend.data[index] = value.backend;
+        value.isInternalRef = true;
+        return value;
+    }
+}
