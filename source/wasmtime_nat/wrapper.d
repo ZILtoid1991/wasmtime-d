@@ -278,3 +278,32 @@ class WasmFunctype {
         return new WasmValtypeVec(*cast(wasm_valtype_vec_t*)wasm_functype_results(backend));
     }
 }
+class WasmFunctypeVec {
+    wasm_functype_vec_t backend;
+    this(wasm_functype_vec_t backend) @nogc nothrow @safe {
+        this.backend = backend;
+    }
+    this() @nogc nothrow {
+        wasm_functype_vec_new_empty(&backend);
+    }
+    this(size_t size) @nogc nothrow {
+        wasm_functype_vec_new_uninitialized(&backend, size);
+    }
+    this(wasm_valtype_t*[] arr) @nogc nothrow {
+        wasm_functype_vec_new(&backend, arr.sizeof, arr.ptr);
+    }
+    this(WasmFunctypeVec other) @nogc nothrow {
+        wasm_functype_vec_copy(&backend, &other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasm_functype_vec_delete(&backend);
+    }
+    WasmFunctype opIndex(size_t index) nothrow const {
+        return new WasmFunctype(backend.data[index]);
+    }
+    WasmFunctype opIndexAssign(WasmFunctype value, size_t index) nothrow {
+        backend.data[index] = value.backend;
+        value.isInternalRef = true;
+        return value;
+    }
+}
