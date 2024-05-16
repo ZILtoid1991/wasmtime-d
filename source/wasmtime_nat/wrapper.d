@@ -4,10 +4,40 @@ import wasmtime.types;
 import wasmtime.funcs;
 public import wasmtime.types : wasm_byte_t, wasm_valkind_t;
 public import wasmtime_nat.enums;
-/** 
+
+class WasmVecTempl(string T, string S) {
+    mixin(
+        `wasm_`~S~`_vec_t backend;` ~ 
+        `this(wasm_`~S~`_vec_t backend) @nogc nothrow @safe { this.backend = backend; }`~
+        `this() @nogc nothrow { wasm_`~S~`_vec_new_empty(&backend); }`~
+        `this(size_t size) @nogc nothrow { wasm_`~S~`_vec_new_uninitialized(&backend, size); }`~
+        /* (T.length ? 
+            `this(wasm_`~S~`_t[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`: 
+            `wasm_`~S~`_vec_new(&backend, arr.sizeof, cast(const(wasm_`~S~`_t)**)arr.ptr);`) ~ */
+        `~this() @nogc nothrow { wasm_`~S~`_vec_delete(&backend); }`
+    );
+    static if (T.length) {
+        mixin(
+            `this(wasm_`~S~`_t*[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`
+        );
+        mixin(
+            T~` opIndex(size_t index) nothrow const { return new `~T~`(backend.data[index]); }`~T~
+            ` opIndexAssign(`~T~` value, size_t index) nothrow { 
+            backend.data[index] = value.backend;
+            value.isInternalRef = true;
+            return value;}`
+        );
+    } else {
+        mixin(`this(wasm_`~S~`_t[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`);
+        mixin(`ref wasm_`~S~`_t opIndex(size_t index) @nogc nothrow { return backend.data[index]; }`);
+    }
+}
+package enum WasmStdDtor(string T) = `~this() @nogc nothrow { if (!isInternalRef) wasm_`~T~`_delete(backend); }`;
+/**
  * Wrapper around `wasm_byte_vec_t`. Used to pass data in and out various functions.
  */
-class WasmByteVec {
+alias WasmByteVec = WasmVecTempl!("", "byte");
+/* class WasmByteVec {
     wasm_byte_vec_t backend;
     ///Primarily used by the library wrapper for creating the wrapper around this type
     this(wasm_byte_vec_t backend) @nogc nothrow @safe {
@@ -31,7 +61,7 @@ class WasmByteVec {
     ref wasm_byte_t opIndex(size_t index) @nogc nothrow {
         return backend.data[index];
     }
-}
+} */
 /** 
  * Wrapper around `wasm_config_t`. Global engine configuration. 
  * 
@@ -222,7 +252,8 @@ class WasmValtype {
 /** 
  * A list of wasm_valtype_t values.
  */
-class WasmValtypeVec {
+alias WasmValtypeVec = WasmVecTempl!("WasmValtype", "valtype");
+/* class WasmValtypeVec {
     wasm_valtype_vec_t backend;
     this(wasm_valtype_vec_t backend) @nogc nothrow @safe {
         this.backend = backend;
@@ -250,7 +281,7 @@ class WasmValtypeVec {
         value.isInternalRef = true;
         return value;
     }
-}
+} */
 class WasmFunctype {
     wasm_functype_t* backend;
     bool isInternalRef;
@@ -290,7 +321,7 @@ class WasmFunctypeVec {
         wasm_functype_vec_new_uninitialized(&backend, size);
     }
     this(wasm_functype_t*[] arr) @nogc nothrow {
-        wasm_functype_vec_new(&backend, arr.sizeof, cast(const(wasm_functype_t)**)arr.ptr);
+        wasm_functype_vec_new(&backend, arr.sizeof, cast(const(wasm_functype_t*)*)arr.ptr);
     }
     this(WasmFunctypeVec other) @nogc nothrow {
         wasm_functype_vec_copy(&backend, &other.backend);
@@ -413,4 +444,7 @@ class WasmTabletypeVec {
         value.isInternalRef = true;
         return value;
     }
+}
+class WasmMemorytype {
+
 }

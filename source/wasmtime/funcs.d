@@ -21,7 +21,7 @@ extern(C) @nogc nothrow {
     alias pwasm_valtype_delete = void function(wasm_valtype_t*);
     alias pwasm_valtype_vec_new_empty = void function(wasm_valtype_vec_t* _out);
     alias pwasm_valtype_vec_new_uninitialized = void function(wasm_valtype_vec_t* _out, size_t);
-    alias pwasm_valtype_vec_new = void function(wasm_valtype_vec_t* _out, size_t, wasm_valtype_t**); 
+    alias pwasm_valtype_vec_new = void function(wasm_valtype_vec_t* _out, size_t, const(wasm_valtype_t*)*); 
     alias pwasm_valtype_vec_copy = void function(wasm_valtype_vec_t* _out, const(wasm_valtype_vec_t)*);
     alias pwasm_valtype_vec_delete = void function(wasm_valtype_vec_t*);
     alias pwasm_valtype_copy = wasm_valtype_t* function(const(wasm_valtype_t)*);
@@ -30,7 +30,7 @@ extern(C) @nogc nothrow {
     alias pwasm_functype_delete = void function(wasm_functype_t*); 
     alias pwasm_functype_vec_new_empty = void function(wasm_functype_vec_t* _out); 
     alias pwasm_functype_vec_new_uninitialized = void function(wasm_functype_vec_t* _out, size_t); 
-    alias pwasm_functype_vec_new = void function(wasm_functype_vec_t* _out, size_t, const(wasm_functype_t)**); 
+    alias pwasm_functype_vec_new = void function(wasm_functype_vec_t* _out, size_t, const(wasm_functype_t*)*); 
     alias pwasm_functype_vec_copy = void function(wasm_functype_vec_t* _out, const(wasm_functype_vec_t)*);
     alias pwasm_functype_vec_delete = void function(wasm_functype_vec_t*);
     alias pwasm_functype_copy = wasm_functype_t* function(const(wasm_functype_t)*);
@@ -40,7 +40,7 @@ extern(C) @nogc nothrow {
     alias pwasm_globaltype_delete = void function(wasm_globaltype_t*);
     alias pwasm_globaltype_vec_new_empty = void function(wasm_globaltype_vec_t* _out); 
     alias pwasm_globaltype_vec_new_uninitialized = void function(wasm_globaltype_vec_t* _out, size_t); 
-    alias pwasm_globaltype_vec_new = void function(wasm_globaltype_vec_t* _out, size_t, const(wasm_globaltype_t)**); 
+    alias pwasm_globaltype_vec_new = void function(wasm_globaltype_vec_t* _out, size_t, const(wasm_globaltype_t*)*); 
     alias pwasm_globaltype_vec_copy = void function(wasm_globaltype_vec_t* _out, const(wasm_globaltype_vec_t)*); 
     alias pwasm_globaltype_vec_delete = void function(wasm_globaltype_vec_t*);
     alias pwasm_globaltype_copy = wasm_globaltype_t* function(const(wasm_globaltype_t)*);
@@ -50,7 +50,7 @@ extern(C) @nogc nothrow {
     alias pwasm_tabletype_delete = void function(wasm_tabletype_t*);
     alias pwasm_tabletype_vec_new_empty = void function(wasm_tabletype_vec_t* _out);
     alias pwasm_tabletype_vec_new_uninitialized = void function(wasm_tabletype_vec_t* _out, size_t); 
-    alias pwasm_tabletype_vec_new = void function(wasm_tabletype_vec_t* _out, size_t, const(wasm_tabletype_t)**); 
+    alias pwasm_tabletype_vec_new = void function(wasm_tabletype_vec_t* _out, size_t, const(wasm_tabletype_t*)*); 
     alias pwasm_tabletype_vec_copy = void function(wasm_tabletype_vec_t* _out, const(wasm_tabletype_vec_t)*);
     alias pwasm_tabletype_vec_delete = void function(wasm_tabletype_vec_t*); 
     alias pwasm_tabletype_copy = wasm_tabletype_t* function(const(wasm_tabletype_t)*);
@@ -60,7 +60,7 @@ extern(C) @nogc nothrow {
     alias pwasm_memorytype_delete = void function(wasm_memorytype_t*);
     alias pwasm_memorytype_vec_new_empty = void function(wasm_memorytype_vec_t* _out); 
     alias pwasm_memorytype_vec_new_uninitialized = void function(wasm_memorytype_vec_t* _out, size_t);
-    alias pwasm_memorytype_vec_new = void function(wasm_memorytype_vec_t* _out, size_t, const(wasm_memorytype_t)**);
+    alias pwasm_memorytype_vec_new = void function(wasm_memorytype_vec_t* _out, size_t, const(wasm_memorytype_t*)*);
     alias pwasm_memorytype_vec_copy = void function(wasm_memorytype_vec_t* _out, const(wasm_memorytype_vec_t)*); 
     alias pwasm_memorytype_vec_delete = void function(wasm_memorytype_vec_t*);
     alias pwasm_memorytype_copy = wasm_memorytype_t* function(const(wasm_memorytype_t)*);
@@ -69,7 +69,7 @@ extern(C) @nogc nothrow {
     alias pwasm_externtype_delete = void function(wasm_externtype_t*);
     alias pwasm_externtype_vec_new_empty = void function(wasm_externtype_vec_t* _out); 
     alias pwasm_externtype_vec_new_uninitialized = void function(wasm_externtype_vec_t* _out, size_t); 
-    alias pwasm_externtype_vec_new = void function(wasm_externtype_vec_t* _out, size_t, const(wasm_externtype_t)**); 
+    alias pwasm_externtype_vec_new = void function(wasm_externtype_vec_t* _out, size_t, const(wasm_externtype_t*)*); 
     alias pwasm_externtype_vec_copy = void function(wasm_externtype_vec_t* _out, const(wasm_externtype_vec_t)*);
     alias pwasm_externtype_vec_delete = void function(wasm_externtype_vec_t*);
     alias pwasm_externtype_copy = wasm_externtype_t* function(const(wasm_externtype_t)*);
@@ -93,7 +93,7 @@ extern(C) @nogc nothrow {
     alias pwasm_importtype_delete = void function(wasm_importtype_t*);
     alias pwasm_importtype_vec_new_empty = void function(wasm_importtype_vec_t* _out); 
     alias pwasm_importtype_vec_new_uninitialized = void function(wasm_importtype_vec_t* _out, size_t);
-    alias pwasm_importtype_vec_new = void function(wasm_importtype_vec_t* _out, size_t, const(wasm_importtype_t)**);
+    alias pwasm_importtype_vec_new = void function(wasm_importtype_vec_t* _out, size_t, const(wasm_importtype_t*)*);
     alias pwasm_importtype_vec_copy = void function(wasm_importtype_vec_t* _out, const(wasm_importtype_vec_t)*);
     alias pwasm_importtype_vec_delete = void function(wasm_importtype_vec_t*);
     alias pwasm_importtype_copy = wasm_importtype_t* function(const(wasm_importtype_t)*);
@@ -104,7 +104,7 @@ extern(C) @nogc nothrow {
     alias pwasm_exporttype_delete = void function(wasm_exporttype_t*);
     alias pwasm_exporttype_vec_new_empty = void function(wasm_exporttype_vec_t* _out);
     alias pwasm_exporttype_vec_new_uninitialized = void function(wasm_exporttype_vec_t* _out, size_t);
-    alias pwasm_exporttype_vec_new = void function(wasm_exporttype_vec_t* _out, size_t, const(wasm_exporttype_t)**); 
+    alias pwasm_exporttype_vec_new = void function(wasm_exporttype_vec_t* _out, size_t, const(wasm_exporttype_t*)*); 
     alias pwasm_exporttype_vec_copy = void function(wasm_exporttype_vec_t* _out, const(wasm_exporttype_vec_t)*);
     alias pwasm_exporttype_vec_delete = void function(wasm_exporttype_vec_t*);
     alias pwasm_exporttype_copy = wasm_exporttype_t* function(const(wasm_exporttype_t)*);
@@ -127,7 +127,7 @@ extern(C) @nogc nothrow {
     alias pwasm_frame_delete = void function(wasm_frame_t*);
     alias pwasm_frame_vec_new_empty = void function(wasm_frame_vec_t* _out); 
     alias pwasm_frame_vec_new_uninitialized = void function(wasm_frame_vec_t* _out, size_t);
-    alias pwasm_frame_vec_new = void function(wasm_frame_vec_t* _out, size_t, const(wasm_frame_t)**); 
+    alias pwasm_frame_vec_new = void function(wasm_frame_vec_t* _out, size_t, const(wasm_frame_t*)*); 
     alias pwasm_frame_vec_copy = void function(wasm_frame_vec_t* _out, const(wasm_frame_vec_t)*); 
     alias pwasm_frame_vec_delete = void function(wasm_frame_vec_t*);
     alias pwasm_frame_copy = wasm_frame_t* function(const(wasm_frame_t)*);
@@ -253,7 +253,7 @@ extern(C) @nogc nothrow {
     alias pwasm_ref_as_extern_const = const(wasm_extern_t)* function(const(wasm_ref_t)*);
     alias pwasm_extern_vec_new_empty = void function(wasm_extern_vec_t* _out); 
     alias pwasm_extern_vec_new_uninitialized = void function(wasm_extern_vec_t* _out, size_t);
-    alias pwasm_extern_vec_new = void function(wasm_extern_vec_t* _out, size_t, const(wasm_extern_t)**);
+    alias pwasm_extern_vec_new = void function(wasm_extern_vec_t* _out, size_t, const(wasm_extern_t*)*);
     alias pwasm_extern_vec_copy = void function(wasm_extern_vec_t* _out, const(wasm_extern_vec_t)*);
     alias pwasm_extern_vec_delete = void function(wasm_extern_vec_t*);
     alias pwasm_extern_kind = wasm_externkind_t function(const(wasm_extern_t)*);
@@ -288,9 +288,9 @@ extern(C) @nogc nothrow {
     alias pwasm_instance_exports = void function(const(wasm_instance_t)*, wasm_extern_vec_t* _out);
     alias pwasi_config_delete = void function(wasi_config_t*);
     alias pwasi_config_new = wasi_config_t* function();
-    alias pwasi_config_set_argv = void function(wasi_config_t* config, int argc, const(char)** argv);
+    alias pwasi_config_set_argv = void function(wasi_config_t* config, int argc, const(char*)* argv);
     alias pwasi_config_inherit_argv = void function(wasi_config_t* config);
-    alias pwasi_config_set_env = void function(wasi_config_t* config, int envc, const(char)** names, const(char)** values);
+    alias pwasi_config_set_env = void function(wasi_config_t* config, int envc, const(char*)* names, const(char*)* values);
     alias pwasi_config_inherit_env = void function(wasi_config_t* config);
     alias pwasi_config_set_stdin_file = bool function(wasi_config_t* config, const(char)* path);
     alias pwasi_config_set_stdin_bytes = void function(wasi_config_t* config, wasm_byte_vec_t* binary);
