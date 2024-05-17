@@ -11,9 +11,6 @@ class WasmVecTempl(string T, string S) {
         `this(wasm_`~S~`_vec_t backend) @nogc nothrow @safe { this.backend = backend; }`~
         `this() @nogc nothrow { wasm_`~S~`_vec_new_empty(&backend); }`~
         `this(size_t size) @nogc nothrow { wasm_`~S~`_vec_new_uninitialized(&backend, size); }`~
-        /* (T.length ? 
-            `this(wasm_`~S~`_t[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`: 
-            `wasm_`~S~`_vec_new(&backend, arr.sizeof, cast(const(wasm_`~S~`_t)**)arr.ptr);`) ~ */
         `~this() @nogc nothrow { wasm_`~S~`_vec_delete(&backend); }`
     );
     static if (T.length) {
@@ -37,31 +34,7 @@ package enum WasmStdDtor(string T) = `~this() @nogc nothrow { if (!isInternalRef
  * Wrapper around `wasm_byte_vec_t`. Used to pass data in and out various functions.
  */
 alias WasmByteVec = WasmVecTempl!("", "byte");
-/* class WasmByteVec {
-    wasm_byte_vec_t backend;
-    ///Primarily used by the library wrapper for creating the wrapper around this type
-    this(wasm_byte_vec_t backend) @nogc nothrow @safe {
-        this.backend = backend;
-    }
-    this() @nogc nothrow {
-        wasm_byte_vec_new_empty(&backend);
-    }
-    this(size_t size) @nogc nothrow {
-        wasm_byte_vec_new_uninitialized(&backend, size);
-    }
-    this(wasm_byte_t[] arr) @nogc nothrow {
-        wasm_byte_vec_new(&backend, arr.sizeof, arr.ptr);
-    }
-    this(WasmByteVec other) @nogc nothrow {
-        wasm_byte_vec_copy(&backend, &other.backend);
-    }
-    ~this() @nogc nothrow {
-        wasm_byte_vec_delete(&backend);
-    }
-    ref wasm_byte_t opIndex(size_t index) @nogc nothrow {
-        return backend.data[index];
-    }
-} */
+alias WasmName = WasmByteVec;
 /** 
  * Wrapper around `wasm_config_t`. Global engine configuration. 
  * 
@@ -253,35 +226,6 @@ class WasmValtype {
  * A list of wasm_valtype_t values.
  */
 alias WasmValtypeVec = WasmVecTempl!("WasmValtype", "valtype");
-/* class WasmValtypeVec {
-    wasm_valtype_vec_t backend;
-    this(wasm_valtype_vec_t backend) @nogc nothrow @safe {
-        this.backend = backend;
-    }
-    this() @nogc nothrow {
-        wasm_valtype_vec_new_empty(&backend);
-    }
-    this(size_t size) @nogc nothrow {
-        wasm_valtype_vec_new_uninitialized(&backend, size);
-    }
-    this(wasm_valtype_t*[] arr) @nogc nothrow {
-        wasm_valtype_vec_new(&backend, arr.sizeof, arr.ptr);
-    }
-    this(WasmValtypeVec other) @nogc nothrow {
-        wasm_valtype_vec_copy(&backend, &other.backend);
-    }
-    ~this() @nogc nothrow {
-        wasm_valtype_vec_delete(&backend);
-    }
-    WasmValtype opIndex(size_t index) nothrow const {
-        return new WasmValtype(backend.data[index]);
-    }
-    WasmValtype opIndexAssign(WasmValtype value, size_t index) nothrow {
-        backend.data[index] = value.backend;
-        value.isInternalRef = true;
-        return value;
-    }
-} */
 class WasmFunctype {
     wasm_functype_t* backend;
     bool isInternalRef;
@@ -299,6 +243,9 @@ class WasmFunctype {
     this(WasmFunctype other) @nogc nothrow {
         backend = wasm_functype_copy(other.backend);
     }
+    this(WasmExternkind other) @nogc nothrow {
+        backend = wasm_externtype_as_functype(other.backend);
+    }
     ~this() @nogc nothrow {
         if (!isInternalRef) wasm_functype_delete(backend);
     }
@@ -309,35 +256,7 @@ class WasmFunctype {
         return new WasmValtypeVec(*cast(wasm_valtype_vec_t*)wasm_functype_results(backend));
     }
 }
-class WasmFunctypeVec {
-    wasm_functype_vec_t backend;
-    this(wasm_functype_vec_t backend) @nogc nothrow @safe {
-        this.backend = backend;
-    }
-    this() @nogc nothrow {
-        wasm_functype_vec_new_empty(&backend);
-    }
-    this(size_t size) @nogc nothrow {
-        wasm_functype_vec_new_uninitialized(&backend, size);
-    }
-    this(wasm_functype_t*[] arr) @nogc nothrow {
-        wasm_functype_vec_new(&backend, arr.sizeof, cast(const(wasm_functype_t*)*)arr.ptr);
-    }
-    this(WasmFunctypeVec other) @nogc nothrow {
-        wasm_functype_vec_copy(&backend, &other.backend);
-    }
-    ~this() @nogc nothrow {
-        wasm_functype_vec_delete(&backend);
-    }
-    WasmFunctype opIndex(size_t index) nothrow const {
-        return new WasmFunctype(backend.data[index]);
-    }
-    WasmFunctype opIndexAssign(WasmFunctype value, size_t index) nothrow {
-        backend.data[index] = value.backend;
-        value.isInternalRef = true;
-        return value;
-    }
-}
+alias WasmFunctypeVec = WasmVecTempl!("WasmFunctype", "functype");
 class WasmGlobaltype {
     wasm_globaltype_t* backend;
     bool isInternalRef;
@@ -354,6 +273,9 @@ class WasmGlobaltype {
     this(WasmGlobaltype other) @nogc nothrow {
         backend = wasm_globaltype_copy(other.backend);
     }
+    this(WasmExternkind other) @nogc nothrow {
+        backend = wasm_externtype_as_globaltype(other.backend);
+    }
     ~this() {
         if (!isInternalRef) wasm_globaltype_delete(backend);
     }
@@ -364,47 +286,23 @@ class WasmGlobaltype {
         return wasm_globaltype_mutability(backend);
     }
 }
-class WasmGlobaltypeVec {
-    wasm_globaltype_vec_t backend;
-    this(wasm_globaltype_vec_t backend) @nogc nothrow @safe {
-        this.backend = backend;
-    }
-    this() @nogc nothrow {
-        wasm_globaltype_vec_new_empty(&backend);
-    }
-    this(size_t size) @nogc nothrow {
-        wasm_globaltype_vec_new_uninitialized(&backend, size);
-    }
-    this(wasm_globaltype_t*[] arr) @nogc nothrow {
-        wasm_globaltype_vec_new(&backend, arr.sizeof, cast(const(wasm_globaltype_t)**)arr.ptr);
-    }
-    this(WasmFunctypeVec other) @nogc nothrow {
-        wasm_globaltype_vec_copy(&backend, cast(const(wasm_globaltype_vec_t)*)&other.backend);
-    }
-    ~this() @nogc nothrow {
-        wasm_globaltype_vec_delete(&backend);
-    }
-    WasmGlobaltype opIndex(size_t index) nothrow const {
-        return new WasmGlobaltype(cast(wasm_globaltype_t*)backend.data[index]);
-    }
-    WasmGlobaltype opIndexAssign(WasmGlobaltype value, size_t index) nothrow {
-        backend.data[index] = value.backend;
-        value.isInternalRef = true;
-        return value;
-    }
-}
+alias WasmGlobaltypeVec = WasmVecTempl!("WasmGlobaltype", "globaltype");
 alias WasmLimits = wasm_limits_t;
 class WasmTabletype {
     wasm_tabletype_t* backend;
     bool isInternalRef;
     this(wasm_tabletype_t* backend) @nogc nothrow {
         this.backend = backend;
+        isInternalRef = true;
     }
     this(WasmValtype type, const WasmLimits limits) @nogc nothrow {
         backend = wasm_tabletype_new(type.backend, &limits);
     }
     this(WasmTabletype other) @nogc nothrow {
         backend = wasm_tabletype_copy(other.backend);
+    }
+    this(WasmExternkind other) @nogc nothrow {
+        backend = wasm_externtype_as_tabletype(other.backend);
     }
     ~this() @nogc nothrow {
         if (!isInternalRef) wasm_tabletype_delete(backend);
@@ -416,35 +314,114 @@ class WasmTabletype {
         return *wasm_tabletype_limits(backend);
     }
 }
-class WasmTabletypeVec {
-    wasm_tabletype_vec_t backend;
-    this(wasm_tabletype_vec_t backend) @nogc nothrow @safe {
+alias WasmTabletypeVec = WasmVecTempl!("WasmTabletype", "tabletype");
+class WasmMemorytype {
+    wasm_memorytype_t* backend;
+    bool isInternalRef;
+    this(wasm_memorytype_t* backend) @nogc nothrow {
         this.backend = backend;
+        isInternalRef = true;
     }
-    this() @nogc nothrow {
-        wasm_tabletype_vec_new_empty(&backend);
+    this(WasmLimits limits) @nogc nothrow {
+        backend = pwasm_memorytype_new(limits);
+    } 
+    this(WasmMemorytype other) @nogc nothrow {
+        backend = wasm_memorytype_copy(other.backend);
     }
-    this(size_t size) @nogc nothrow {
-        wasm_tabletype_vec_new_uninitialized(&backend, size);
-    }
-    this(wasm_tabletype_t*[] arr) @nogc nothrow {
-        wasm_tabletype_vec_new(&backend, arr.sizeof, cast(const(wasm_tabletype_t)**)arr.ptr);
-    }
-    this(WasmFunctypeVec other) @nogc nothrow {
-        wasm_tabletype_vec_copy(&backend, cast(const(wasm_tabletype_vec_t)*)&other.backend);
+    this(WasmExternkind other) @nogc nothrow {
+        backend = wasm_externtype_as_memorytype(other.backend);
     }
     ~this() @nogc nothrow {
-        wasm_tabletype_vec_delete(&backend);
+        if (!isInternalRef) wasm_tabletype_delete(backend);
     }
-    WasmTabletype opIndex(size_t index) nothrow const {
-        return new WasmTabletype(cast(wasm_tabletype_t*)backend.data[index]);
-    }
-    WasmTabletype opIndexAssign(WasmTabletype value, size_t index) nothrow {
-        backend.data[index] = value.backend;
-        value.isInternalRef = true;
-        return value;
+    WasmLimits limits() @nogc nothrow {
+        return wasm_memorytype_limits(backend);
     }
 }
-class WasmMemorytype {
-
+alias WasmMemorytypeVec = WasmVecTempl!("WasmMemorytype", "memorytype");
+class WasmExterntype {
+    wasm_externtype_t* backend;
+    bool isInternalRef;
+    this(wasm_externtype_t* backend) @nogc nothrow {
+        this.backend = backend;
+        isInternalRef = true;
+    }
+    this(WasmFunctype other) @nogc nothrow {
+        backend = wasm_functype_as_externtype(other.backend);
+    }
+    this(WasmGlobaltype other) @nogc nothrow {
+        backend = wasm_globaltype_as_externtype(other.backend);
+    }
+    this(WasmTabletype other) @nogc nothrow {
+        backend = wasm_tabletype_as_externtype(other.backend);
+    }
+    this(WasmMemorytype other) @nogc nothrow {
+        backend = wasm_memorytype_as_externtype(other.backend);
+    }
+    this(WasmExterntype other) @nogc nothrow {
+        backend = wasm_externtype_copy(other.backend);
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) pwasm_externtype_delete(backend);
+    }
+    WasmExternkind kind() @nogc nothrow {
+        wasm_externtype_kind(backend);
+    }
 }
+alias WasmExterntypeVec = WasmVecTempl!("WasmExterntype", "externtype");
+class WasmImporttype {
+    wasm_importtype_t* backend;
+    bool isInternalRef;
+    this(wasm_importtype_t* backend) @nogc nothrow {
+        this.backend = backend;
+        isInternalRef = true;
+    }
+    this(WasmName mod, WasmName name, WasmExterntype kind) @nogc nothrow {
+        backend = wasm_importtype_new(&mod.backend, &mane.backend, kind.backend);
+    }
+    this(WasmImporttype other) @nogc nothrow {
+        this.backend = wasm_importtype_copy(other.backend);
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasm_importtype_delete(backend);
+    }
+    WasmName mod() @nogc nothrow {
+        return new WasmName(wasm_importtype_module(backend));
+    }
+    WasmName name() @nogc nothrow {
+        return new WasmName(wasm_importtype_name(backend));
+    }
+    WasmExterntype type() @nogc nothrow {
+        return new WasmExterntype(wasm_importtype_type(backend));
+    }
+}
+alias WasmImporttypeVec = WasmVecTempl!("WasmImporttype", "importtype");
+class WasmExporttype {
+    wasm_exporttype_t* backend;
+    bool isInternalRef;
+    this(wasm_exporttype_t* backend) @nogc nothrow {
+        this.backend = backend;
+        isInternalRef = true;
+    }
+    this(WasmName mod, WasmName name, WasmExterntype kind) @nogc nothrow {
+        backend = wasm_exporttype_new(&mod.backend, &mane.backend, kind.backend);
+    }
+    this(WasmExporttype other) @nogc nothrow {
+        this.backend = wasm_exporttype_copy(other.backend);
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasm_exporttype_delete(backend);
+    }
+    WasmName mod() @nogc nothrow {
+        return new WasmName(wasm_exporttype_module(backend));
+    }
+    WasmName name() @nogc nothrow {
+        return new WasmName(wasm_exporttype_name(backend));
+    }
+    WasmExterntype type() @nogc nothrow {
+        return new WasmExterntype(wasm_exporttype_type(backend));
+    }
+}
+alias WasmExporttypeVec = WasmVecTempl!("WasmExporttype", "exporttype");
+alias WasmVal = wasm_val_t;
+alias WasmValVec = WasmVecTempl!("", "val");
