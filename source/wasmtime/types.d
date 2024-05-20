@@ -328,10 +328,10 @@ struct wasmtime_val_t {
 
 struct wasmtime_caller_t {}
 
-alias wasmtime_func_callback_t = extern(C) wasm_trap_t* function(void* env, wasmtime_caller_t* caller, 
+alias wasmtime_func_callback_t = extern(C) nothrow wasm_trap_t* function(void* env, wasmtime_caller_t* caller, 
         const(wasmtime_val_t*) args, size_t nargs, wasmtime_val_t* results, size_t nresults);
 
-alias wasmtime_func_unchecked_callback_t = extern(C) wasm_trap_t* function(void* env, wasmtime_caller_t* caller, 
+alias wasmtime_func_unchecked_callback_t = extern(C) nothrow wasm_trap_t* function(void* env, wasmtime_caller_t* caller, 
         wasmtime_val_raw_t* args_and_results, size_t num_args_and_results);
 
 struct wasmtime_instance_t {
