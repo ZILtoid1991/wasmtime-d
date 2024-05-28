@@ -7,6 +7,7 @@ public import wasmtime.types : wasm_byte_t, wasm_valkind_t;
 public import wasmtime_nat.enums;
 import std.typetuple;
 import std.traits;
+import std.utf;
 
 class WasmVecTempl(string T, string S) {
     mixin(`alias BackendT = wasm_`~S~`_vec_t;`);
@@ -1246,6 +1247,9 @@ class WasiConfig {
 class WasmtimeError {
     wasmtime_error_t* backend;
     bool isInternalRef;
+    package this(wasmtime_error_t* backend) @nogc nothrow {
+        this.backend = backend;
+    }
     this(const(char)* msg) @nogc nothrow {
         backend = wasmtime_error_new(msg);
     }
@@ -1264,5 +1268,184 @@ class WasmtimeError {
         wasm_frame_vec_t result;
         wasmtime_error_wasm_trace(backend, &result);
         return new WasmFrameVec(result);
+    }
+}
+class WasmtimeModule {
+    wasmtime_module_t* backend;
+    static WasmtimeError create(WasmEngine engine, ubyte[] wasm, ref WasmtimeModule mod) nothrow {
+        wasmtime_module_t* creation;
+        wasmtime_error_t* error = wasmtime_module_new(engine.backend, wasm.ptr, wasm.length, &creation);
+        if (error) return new WasmtimeError(error);
+        if (creation) mod = new WasmtimeModule(creation);
+        return null;
+    }
+    static WasmtimeError deserialize(WasmEngine engine, ubyte[] wasm, ref WasmtimeModule mod) nothrow {
+        wasmtime_module_t* creation;
+        wasmtime_error_t* error = wasmtime_module_deserialize(engine.backend, wasm.ptr, wasm.length, &creation);
+        if (error) return new WasmtimeError(error);
+        if (creation) mod = new WasmtimeModule(creation);
+        return null;
+    }
+    static WasmtimeError deserializeFromFile(WasmEngine engine, const(char)* path, ref WasmtimeModule mod) nothrow {
+        wasmtime_module_t* creation;
+        wasmtime_error_t* error = wasmtime_module_deserialize_file(engine.backend, path, &creation);
+        if (error) return new WasmtimeError(error);
+        if (creation) mod = new WasmtimeModule(creation);
+        return null;
+    }
+    static WasmtimeError validate(WasmEngine engine, ubyte[] wasm) nothrow {
+        wasmtime_error_t* error = wasmtime_module_validate(engine.backend, wasm.ptr, wasm.length);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    package this(wasmtime_module_t* backend) @nogc nothrow {
+        this.backend = backend;
+    }
+    this(WasmtimeModule other) @nogc nothrow {
+        backend = wasmtime_module_clone(other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasmtime_module_delete(backend);
+    }
+    WasmImporttypeVec imports() nothrow {
+        WasmImporttypeVec result = new WasmImporttypeVec();
+        wasmtime_module_imports(backend, &result.backend);
+        return result;
+    }
+    WasmExporttypeVec exports() nothrow {
+        WasmExporttypeVec result = new WasmExporttypeVec();
+        wasmtime_module_exports(backend, &result.backend);
+        return result;
+    }
+    WasmtimeError serialize(ref WasmByteVec _out) nothrow {
+        wasmtime_error_t* error = wasmtime_module_serialize(backend, &_out.backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    void*[2] imageRange() @nogc nothrow {
+        void*[2] result;
+        wasmtime_module_image_range(backend, &result[0], &result[1]);
+        return result;
+    }
+}
+class WasmtimeSharedmemory {
+    wasmtime_sharedmemory_t* backend;
+    static WasmtimeError create(WasmEngine engine, WasmMemorytype ty, ref WasmtimeSharedmemory _out) nothrow {
+        wasmtime_sharedmemory_t* creation;
+        wasmtime_error_t* error = wasmtime_sharedmemory_new(engine.backend, ty.backend, &creation);
+        if (error) return new WasmtimeError(error);
+        if (creation) _out = new WasmtimeSharedmemory(creation);
+        return null;
+    }
+    package this(wasmtime_sharedmemory_t* backend) @nogc nothrow {
+        this.backend = backend;
+    }
+    this(WasmtimeSharedmemory other) @nogc nothrow {
+        backend = wasmtime_sharedmemory_clone(other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasmtime_sharedmemory_delete(backend);
+    }
+    WasmMemorytype type() nothrow {
+        return new WasmMemorytype(wasmtime_sharedmemory_type(backend));
+    }
+    ubyte[] data() @nogc nothrow {
+        return wasmtime_sharedmemory_data(backend)[0..wasmtime_sharedmemory_data_size(backend)];
+    }
+    size_t size() @nogc nothrow {
+        return wasmtime_sharedmemory_size(backend);
+    }
+    WasmtimeError grow(size_t delta, size_t* prevSize) nothrow {
+        wasmtime_error_t* error = wasmtime_sharedmemory_grow(backend, delta, prevSize);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+}
+class WasmtimeStore {
+    wasmtime_store_t* backend;
+    this(WasmEngine engine, void* data, wasmFinalizerFuncT finalizer) @nogc nothrow {
+        backend = wasmtime_store_new(engine.backend, data, finalizer);
+    }
+    ~this() @nogc nothrow {
+        wasmtime_store_delete(backend);
+    }
+    WasmtimeContext context() nothrow {
+        return new WasmtimeContext(wasmtime_store_context(backend));
+    }
+    void limiter(int64_t memorySize, int64_t tableElements, int64_t instances, int64_t tables, int64_t memories) 
+            @nogc nothrow {
+        wasmtime_store_limiter(backend, memorySize, tableElements, instances, tables, memories);
+    }
+    void epochDeadlineCallback(wasmSEDCFuncT func, void *data, wasmFinalizerFuncT finalizer) @nogc nothrow {
+        wasmtime_store_epoch_deadline_callback(backend, func, data, finalizer);
+    }
+}
+class WasmtimeContext {
+    wasmtime_context_t* backend;
+    this(wasmtime_context_t* backend) @nogc nothrow {
+        this.backend = backend;
+    }
+    ~this() @nogc nothrow {
+        wasmtime_context_gc(backend);
+    }
+    void* getData() @nogc nothrow {
+        return wasmtime_context_get_data(backend);
+    }
+    void setData(void* data) @nogc nothrow {
+        wasmtime_context_set_data(backend, data);
+    }
+    WasmtimeError setWasi(WasiConfig cfg) nothrow {
+        wasmtime_error_t* error = wasmtime_context_set_wasi(backend, cfg.backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError setFuel(uint64_t fuel) nothrow {
+        wasmtime_error_t* error = wasmtime_context_set_fuel(backend, fuel);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError getFuel(uint64_t* fuel) nothrow {
+        wasmtime_error_t* error = wasmtime_context_get_fuel(backend, fuel);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    void setEpochDeadline(uint64_t ticsBeyondCurrent) {
+        wasmtime_context_set_epoch_deadline(backend, ticsBeyondCurrent);
+    }
+}
+class WasmtimeExtern {
+    wasmtime_extern_t* backend;
+    ~this() @nogc nothrow {
+        wasmtime_extern_delete(backend);
+    }
+    WasmExterntype type(WasmtimeContext context) nothrow {
+        return new WasmExterntype(wasmtime_extern_type(context.backend, backend));
+    }
+}
+class WasmtimeAnyref {
+    wasmtime_anyref_t* backend;
+    WasmtimeContext context;    ///Currently it's there due to the functions, might need to be changed
+    bool isInternalRef;
+    this(WasmtimeContext c, WasmtimeAnyref other) @nogc nothrow {
+        backend = wasmtime_anyref_clone(c.backend, other.backend);
+        this.context = c;
+    }
+    ///Wrapper for wasmtime_anyref_from_raw and wasmtime_anyref_from_i31
+    this(WasmtimeContext c, uint32_t raw, bool i31) @nogc nothrow {
+        if (i31) backend = wasmtime_anyref_from_i31(c.backend, raw);
+        else backend = wasmtime_anyref_from_raw(c.backend, raw);
+        this.context = c;
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasmtime_anyref_delete(context.backend, backend);
+    }
+    uint32_t toRaw() @nogc nothrow {
+        return wasmtime_anyref_to_raw(context.backend, backend);
+    }
+    bool i31GetU(uint32_t* dst) @nogc nothrow {
+        return wasmtime_anyref_i31_get_u(context.backend, backend, dst);
+    }
+    bool i31GetS(int32_t* dst) @nogc nothrow {
+        return wasmtime_anyref_i31_get_s(context.backend, backend, dst);
     }
 }
