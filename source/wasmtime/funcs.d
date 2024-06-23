@@ -392,7 +392,7 @@ extern(C) @nogc nothrow {
     alias pwasmtime_func_new_unchecked = void function(wasmtime_context_t* store, const(wasm_functype_t)* type, wasmtime_func_unchecked_callback_t callback, void* env, wasmFinalizerFuncT, wasmtime_func_t* ret);
     alias pwasmtime_func_type = wasm_functype_t* function(const(wasmtime_context_t)* store,const(wasmtime_func_t) *func);
     alias pwasmtime_func_call = wasmtime_error_t* function(wasmtime_context_t* store, const(wasmtime_func_t)* func, const(wasmtime_val_t)* args, size_t nargs, wasmtime_val_t* results, size_t nresults, wasm_trap_t** trap);
-    alias pwasmtime_func_call_unchecked = wasmtime_error_t* function(wasmtime_context_t* store, const(wasmtime_func_t)* func, wasmtime_val_raw_t* args_and_results,                           size_t args_and_results_len, wasm_trap_t **trap);
+    alias pwasmtime_func_call_unchecked = wasmtime_error_t* function(wasmtime_context_t* store, const(wasmtime_func_t)* func, wasmtime_val_raw_t* args_and_results, size_t args_and_results_len, wasm_trap_t **trap);
     alias pwasmtime_caller_export_get = bool function(wasmtime_caller_t* caller, const(char)* name, size_t name_len, wasmtime_extern_t* item);
     alias pwasmtime_caller_context = wasmtime_context_t* function(wasmtime_caller_t* caller);
     alias pwasmtime_func_from_raw = void function(wasmtime_context_t* context, void* raw, wasmtime_func_t* ret);

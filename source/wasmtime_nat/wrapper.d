@@ -12,27 +12,57 @@ import std.utf;
 class WasmVecTempl(string T, string S) {
     mixin(`alias BackendT = wasm_`~S~`_vec_t;`);
     BackendT backend;
-    mixin(
+    mixin(`alias BackendST = wasm_`~S~`_t;`);
+    this(BackendT backend) @nogc nothrow {
+        this.backend = backend;
+    }
+    /* this(BackendST[] arr) @nogc nothrow {
+        mixin(`wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr);`);
+    } */
+    this() @nogc nothrow {
+        mixin(`wasm_`~S~`_vec_new_empty(&backend);`);
+    }
+    this(size_t size) @nogc nothrow {
+        mixin(`wasm_`~S~`_vec_new_uninitialized(&backend, size);`);
+    }
+    ~this() @nogc nothrow {
+        mixin(`wasm_`~S~`_vec_delete(&backend);`);
+    }
+    /* mixin(
         `this(wasm_`~S~`_vec_t backend) @nogc nothrow @safe { this.backend = backend; }`~
-        //`this(wasm_`~S~`_vec_t backend) @nogc nothrow @safe { this.backend = backend; }`~
         `this() @nogc nothrow { wasm_`~S~`_vec_new_empty(&backend); }`~
         `this(size_t size) @nogc nothrow { wasm_`~S~`_vec_new_uninitialized(&backend, size); }`~
         `~this() @nogc nothrow { wasm_`~S~`_vec_delete(&backend); }`
-    );
+    ); */
     static if (T.length) {
+        mixin(`alias OutT = `~T~`;`);
+        OutT opIndex(size_t index) nothrow { 
+            return new OutT(backend.data[index]); 
+        }
+        OutT opIndexAssign(OutT value, size_t index) nothrow { 
+            backend.data[index] = value.backend;
+            value.isInternalRef = true;
+            return value;
+        }
         mixin(
             `this(wasm_`~S~`_t*[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`
         );
-        mixin(
+        /* mixin(
             T~` opIndex(size_t index) nothrow const { return new `~T~`(backend.data[index]); }`~T~
             ` opIndexAssign(`~T~` value, size_t index) nothrow { 
             backend.data[index] = value.backend;
             value.isInternalRef = true;
             return value;}`
-        );
+        ); */
     } else {
-        mixin(`this(wasm_`~S~`_t[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`);
-        mixin(`ref wasm_`~S~`_t opIndex(size_t index) @nogc nothrow { return backend.data[index]; }`);
+        ref BackendST opIndex(size_t index) @nogc nothrow { 
+            return backend.data[index]; 
+        }
+        this(BackendST[] arr) @nogc nothrow {
+            mixin(`wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr);`);
+        }
+        //mixin(`this(wasm_`~S~`_t[] arr) @nogc nothrow { wasm_`~S~`_vec_new(&backend, arr.sizeof, arr.ptr); }`);
+        /* mixin(`ref wasm_`~S~`_t opIndex(size_t index) @nogc nothrow { return backend.data[index]; }`); */
     }
 }
 package enum WasmStdDtor(string T) = `~this() @nogc nothrow { if (!isInternalRef) wasm_`~T~`_delete(backend); }`;
@@ -353,11 +383,26 @@ class WasmMemorytype {
     this(WasmExterntype other) @nogc nothrow {
         backend = wasm_externtype_as_memorytype(other.backend);
     }
+    this(ulong min, bool maxPresent, ulong max, bool is64) @nogc nothrow {
+        backend = wasmtime_memorytype_new(min, maxPresent, max, is64);
+    }
     ~this() @nogc nothrow {
         if (!isInternalRef) wasm_memorytype_delete(backend);
     }
     WasmLimits limits() @nogc nothrow {
         return *wasm_memorytype_limits(backend);
+    }
+    ulong min() @nogc nothrow {
+        return wasmtime_memorytype_minimum(backend);
+    }
+    bool max(ref ulong result) @nogc nothrow {
+        return wasmtime_memorytype_maximum(backend, &result);
+    }
+    bool is64() @nogc nothrow {
+        return wasmtime_memorytype_is64(backend);
+    }
+    bool isShared() @nogc nothrow {
+        return wasmtime_memorytype_isshared(backend);
     }
 }
 alias WasmMemorytypeVec = WasmVecTempl!("WasmMemorytype", "memorytype");
@@ -536,6 +581,14 @@ class WasmFrame {
     size_t moduleOffset() @nogc nothrow const {
         return wasm_frame_module_offset(backend);
     }
+    string funcName() nothrow {
+        auto result = wasmtime_frame_func_name(backend);
+        return cast(string)result.data[0..result.size];
+    }
+    string moduleName() nothrow {
+        auto result = wasmtime_frame_module_name(backend);
+        return cast(string)result.data[0..result.size];
+    }
 }
 alias WasmFrameVec = WasmVecTempl!("WasmFrame", "frame");
 alias WasmMessage = WasmName;
@@ -579,6 +632,9 @@ class WasmTrap {
     }
     void setHostInfo(void* info, wasmFinalizerFuncT finalizer) @nogc nothrow {
         wasm_trap_set_host_info_with_finalizer(backend, info, finalizer);
+    }
+    bool code(ref wasmtime_trap_code_t code) { 
+        return wasmtime_trap_code(backend, &code);
     }
 }
 class WasmForeign {
@@ -698,8 +754,10 @@ class WasmSharedModule {
         if (!isInternalRef) wasm_shared_module_delete(backend);
     }
 }
+alias WasmFuncCallback = wasm_func_callback_t;
 class WasmFunction {
     wasm_func_t* backend;
+    WasmFuncCallback refcount;
     bool isInternalRef;
     this(wasm_func_t* backend) @nogc nothrow {
         this.backend = backend;
@@ -720,6 +778,7 @@ class WasmFunction {
     }
     this(WasmStore st, WasmFunctype type, wasm_func_callback_t callback) @nogc nothrow {
         this.backend = wasm_func_new(st.backend, type.backend, callback);
+        refcount = callback;
     }
     this(WasmStore st, WasmFunctype type, wasm_func_callback_with_env_t callback, void* env, 
             wasmFinalizerFuncT finalizer) @nogc nothrow {
@@ -790,7 +849,17 @@ class WasmFunction {
             } else if (_arguments[i] == typeid(double)) {
                 val.of.f64 = va_arg!double(_argptr);
                 val.kind = WasmValkind.F64;
-            } else {
+            } /* else if (_arguments[i].) {
+                if (_arguments[i].tsize == ulong.sizeof) {
+                    val.of.i64 = va_arg!ulong(_argptr);
+                    val.kind = WasmValkind.I64;
+                } else if (_arguments[i].tsize == uint.sizeof) {
+                    val.of.i32 = va_arg!uint(_argptr);
+                    val.kind = WasmValkind.I32;
+                } else {
+                    assert(0, "UDA 'WasmCfgStructPkg' must only be attached to structs with 4 or 8 bytes in size!");    
+                }
+            } */ else {
                 assert(0, "Function argument not yet supported!");
             }
         }
@@ -1073,9 +1142,6 @@ class WasmMemory {
     this(WasmMemory other) @nogc nothrow {
         backend = wasm_memory_copy(other.backend);
     }
-    ~this() @nogc nothrow {
-        if (!isInternalRef) wasm_memory_delete(backend);
-    }
     this(WasmRef other) @nogc nothrow {
         backend = wasm_ref_as_memory(other.backend);
     }
@@ -1084,6 +1150,9 @@ class WasmMemory {
     }
     this(WasmExtern other) @nogc nothrow {
         backend = wasm_extern_as_memory(other.backend);
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasm_memory_delete(backend);
     }
     bool same(WasmMemory other) @nogc nothrow const {
         return wasm_memory_same(backend, other.backend);
@@ -1413,7 +1482,14 @@ class WasmtimeContext {
         wasmtime_context_set_epoch_deadline(backend, ticsBeyondCurrent);
     }
 }
-class WasmtimeExtern {
+alias WasmtimeExtern = wasmtime_extern_t;
+WasmExterntype externType(WasmtimeExtern ext, WasmtimeContext context) nothrow {
+    return new WasmExterntype(wasmtime_extern_type(context.backend, &ext));
+}
+WasmExterntype externType(WasmtimeExtern* ext, WasmtimeContext context) nothrow {
+    return new WasmExterntype(wasmtime_extern_type(context.backend, ext));
+}
+/* class WasmtimeExtern {
     wasmtime_extern_t* backend;
     ~this() @nogc nothrow {
         wasmtime_extern_delete(backend);
@@ -1421,7 +1497,7 @@ class WasmtimeExtern {
     WasmExterntype type(WasmtimeContext context) nothrow {
         return new WasmExterntype(wasmtime_extern_type(context.backend, backend));
     }
-}
+} */
 class WasmtimeAnyref {
     wasmtime_anyref_t* backend;
     WasmtimeContext context;    ///Currently it's there due to the functions, might need to be changed
@@ -1447,5 +1523,257 @@ class WasmtimeAnyref {
     }
     bool i31GetS(int32_t* dst) @nogc nothrow {
         return wasmtime_anyref_i31_get_s(context.backend, backend, dst);
+    }
+}
+class WasmtimeExternref {
+    wasmtime_externref_t* backend;
+    WasmtimeContext context;    ///Currently it's there due to the functions, might need to be changed
+    bool isInternalRef;
+    this(WasmtimeContext c, void* data, wasmFinalizerFuncT finalizer) @nogc nothrow {
+        backend = wasmtime_externref_new(c.backend, data, finalizer);
+        this.context = c;
+    }
+    this(WasmtimeContext c, uint32_t raw) @nogc nothrow {
+        backend = wasmtime_externref_from_raw(c.backend, raw);
+        context = c;
+    }
+    this(WasmtimeExternref other) {
+        backend = wasmtime_externref_clone(other.context.backend, other.backend);
+        context = other.context;
+    }
+    ~this() @nogc nothrow {
+        if (!isInternalRef) wasmtime_externref_delete(context.backend, backend);
+    }
+    void* data() @nogc nothrow {
+        return wasmtime_externref_data(context.backend, backend);
+    }
+    uint32_t toRaw() @nogc nothrow {
+        return wasmtime_externref_to_raw(context.backend, backend);
+    }
+}
+alias WasmtimeValunion = wasmtime_valunion_t;
+alias WasmtimeValRaw = wasmtime_val_raw_t;
+alias WasmTimeVal = wasmtime_val_t;
+alias WasmtimeFuncCallback = wasmtime_func_callback_t;
+alias WasmtimeFuncUncheckedCallback = wasmtime_func_unchecked_callback_t;
+class WasmtimeFunc {
+    wasmtime_func_t backend;
+    WasmtimeContext context;
+    this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) 
+            @nogc nothrow {
+        context = c;
+        wasmtime_func_new(c.backend, type.backend, callback, env, finalizer, &backend);
+    }
+    this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncUncheckedCallback callback, void* env, 
+            wasmFinalizerFuncT finalizer) @nogc nothrow {
+        context = c;
+        wasmtime_func_new_unchecked(c.backend, type.backend, callback, env, finalizer, &backend);
+    }
+    this(WasmtimeContext c, void* raw) @nogc nothrow {
+        context = c;
+        wasmtime_func_from_raw(c.backend, raw, &backend);
+    }
+    WasmFunctype type() nothrow {
+        return new WasmFunctype(wasmtime_func_type(context.backend, &backend));
+    }
+    WasmtimeError call(WasmTimeVal[] args, WasmTimeVal[] results, ref WasmTrap trap) nothrow {
+        wasm_trap_t* trap0;
+        wasmtime_error_t* error = wasmtime_func_call(context.backend, &backend, args.ptr, args.length, results.ptr, 
+                results.length, &trap0);
+        if (trap0) trap = new WasmTrap(trap0);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError callUnchecked(WasmtimeValRaw[] argsnres, ref WasmTrap trap) nothrow {
+        wasm_trap_t* trap0;
+        wasmtime_error_t* error = wasmtime_func_call_unchecked(context.backend, &backend, argsnres.ptr, argsnres.length, 
+                &trap0);
+        if (trap0) trap = new WasmTrap(trap0);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    void* toRaw() @nogc nothrow {
+        return wasmtime_func_to_raw(context.backend, &backend);
+    }
+}
+class WasmtimeGlobal {
+    static wasmtime_error_t* lastError;
+    wasmtime_global_t backend;
+    WasmtimeContext context;
+    this(WasmtimeContext c, WasmGlobaltype type, WasmTimeVal val) @nogc nothrow {
+        context = c;
+        lastError = wasmtime_global_new(c.backend, type.backend, &val, &backend);
+    }
+    WasmGlobaltype type() nothrow {
+        return new WasmGlobaltype(wasmtime_global_type(context.backend, &backend));
+    }
+    WasmTimeVal get() nothrow {
+        WasmTimeVal result;
+        wasmtime_global_get(context.backend, &backend, &result);
+        return result;
+    }
+    WasmtimeError set(WasmTimeVal val) nothrow {
+        wasmtime_error_t* error = wasmtime_global_set(context.backend, &backend, &val);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+}
+class WasmtimeInstance {
+    static wasm_trap_t* lastTrap;
+    static wasmtime_error_t* lastError;
+    wasmtime_instance_t backend;
+    WasmtimeContext context;
+    this(WasmtimeContext c, WasmtimeModule mod, WasmtimeExtern[] imports) @nogc nothrow {
+        context = c;
+        lastError = wasmtime_instance_new(c.backend, mod.backend, imports.ptr, imports.length, &backend, &lastTrap);
+    }
+    WasmtimeExtern exportGet(string name) @nogc nothrow {
+        WasmtimeExtern result;
+        wasmtime_instance_export_get(context.backend, &backend, name.ptr, name.length, &result);
+        return result;
+    }
+    WasmtimeExtern exportGetNth(size_t index, ref string name) @nogc nothrow {
+        WasmtimeExtern result;
+        char* namePtr;
+        size_t nameLen;
+        wasmtime_instance_export_nth(context.backend, &backend, index, &namePtr, &nameLen, &result);
+        if (namePtr) name = cast(string)namePtr[0..nameLen];
+        return result;
+    }
+}
+class WasmtimeLinker {
+    wasmtime_linker_t* backend;
+    this(WasmEngine engine) @nogc nothrow {
+        backend = wasmtime_linker_new(engine.backend);
+    }
+    this(WasmtimeLinker other) @nogc nothrow {
+        backend = wasmtime_linker_clone(other.backend);
+    }
+    ~this() @nogc nothrow {
+        wasmtime_linker_delete(backend);
+    }
+    void allowShadowing(bool val) @nogc nothrow {
+        wasmtime_linker_allow_shadowing(backend, val);
+    }
+    WasmtimeError define(WasmtimeContext context, string mod, string name, WasmtimeExtern item) nothrow {
+        wasmtime_error_t* error = 
+                wasmtime_linker_define(backend, context.backend, mod.ptr, mod.length, name.ptr, name.length, &item);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError defineFunc(string mod, string name, WasmFunctype type, WasmtimeFuncCallback cb, void* data, 
+            wasmFinalizerFuncT finalizer) nothrow {
+        wasmtime_error_t* error = wasmtime_linker_define_func(backend, mod.ptr, mod.length, name.ptr, name.length, 
+                type.backend, cb, data, finalizer);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError defineFunc(string mod, string name, WasmFunctype type, WasmtimeFuncUncheckedCallback cb, void* data, 
+            wasmFinalizerFuncT finalizer) nothrow {
+        wasmtime_error_t* error = wasmtime_linker_define_func_unchecked(backend, mod.ptr, mod.length, name.ptr, 
+                name.length, type.backend, cb, data, finalizer);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError defineWASI() nothrow {
+        wasmtime_error_t* error = wasmtime_linker_define_wasi(backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError defineInstance(WasmtimeContext store, string name, WasmtimeInstance instance) nothrow {
+        wasmtime_error_t* error = 
+                wasmtime_linker_define_instance(backend, store.backend, name.ptr, name.length, &instance.backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError instantiate(WasmtimeContext store, WasmtimeModule mod, WasmtimeInstance instance, 
+            ref WasmTrap trap) nothrow {
+        wasm_trap_t* trap0;
+        wasmtime_error_t* error = 
+                wasmtime_linker_instantiate(backend, store.backend, mod.backend, &instance.backend, &trap0);
+        if (trap0) trap = new WasmTrap(trap0);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError setModule(WasmtimeContext store, string name, WasmtimeModule mod) nothrow {
+        wasmtime_error_t* error = 
+                wasmtime_linker_module(backend, store.backend, name.ptr, name.length, mod.backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    WasmtimeError getDefault(WasmtimeContext store, string name, WasmtimeFunc func) nothrow {
+        wasmtime_error_t* error = 
+                wasmtime_linker_get_default(backend, store.backend, name.ptr, name.length, &func.backend);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+    bool get(WasmtimeContext store, string mod, string name, ref WasmtimeExtern item) @nogc nothrow {
+        return wasmtime_linker_get(backend, store.backend, mod.ptr, mod.length, name.ptr, name.length, &item); 
+    }
+    WasmtimeError instantiatePre(WasmtimeModule mod, wasmtime_instance_pre_t* iP) nothrow {
+        wasmtime_error_t* error = 
+        wasmtime_linker_instantiate_pre(backend, mod.backend, &iP);
+        if (error) return new WasmtimeError(error);
+        return null;
+    }
+}
+class WasmtimeMemory {
+    static wasmtime_error_t* lastError;
+    wasmtime_memory_t backend;
+    WasmtimeContext context;
+    this(WasmtimeContext store, WasmMemorytype type) @nogc nothrow {
+        context = store;
+        lastError = wasmtime_memory_new(store.backend, type.backend, &backend);
+    }
+    WasmMemorytype type() nothrow {
+        return new WasmMemorytype(wasmtime_memory_type(context.backend, &backend));
+    }
+    ubyte* data() @nogc nothrow {
+        return wasmtime_memory_data(context.backend, &backend);
+    }
+    size_t dataSize() @nogc nothrow {
+        return wasmtime_memory_data_size(context.backend, &backend);
+    }
+    ulong size() @nogc nothrow {
+        return wasmtime_memory_size(context.backend, &backend);
+    }
+    WasmtimeError grow(ulong delta, ulong* prevSize) nothrow {
+        lastError = wasmtime_memory_grow(context.backend, &backend, delta, prevSize);
+        if (lastError) return new WasmtimeError(lastError);
+        return null;
+    }
+}
+/* class WasmtimeGuestprofiler {
+    wasmtime_guestprofiler_t* backend;
+    
+    ~this() @nogc nothrow {
+        wasmtime_guestprofiler_delete(backend);
+    }
+} */
+class WasmtimeTable {
+    static wasmtime_error_t* lastError;
+    wasmtime_table_t backend;
+    WasmtimeContext context;
+    this(WasmtimeContext store, WasmTabletype type, WasmTimeVal* init) @nogc nothrow {
+        lastError = wasmtime_table_new(store.backend, type.backend, init, &backend);
+    }
+    WasmTabletype type() nothrow {
+        return new WasmTabletype(wasmtime_table_type(context.backend, &backend));
+    }
+    bool get(uint index, ref WasmTimeVal val) @nogc nothrow {
+        return wasmtime_table_get(context.backend, &backend, index, &val);
+    }
+    WasmtimeError set(uint index, WasmTimeVal val) nothrow {
+        lastError = wasmtime_table_set(context.backend, &backend, index, &val);
+        if (lastError) return new WasmtimeError(lastError);
+        return null;
+    }
+    uint size() @nogc nothrow {
+        return wasmtime_table_size(context.backend, &backend);
+    }
+    WasmtimeError grow(uint delta, WasmTimeVal* init, ref uint prevSize) nothrow {
+        lastError = wasmtime_table_grow(context.backend, &backend, delta, init, &prevSize);
+        if (lastError) return new WasmtimeError(lastError);
+        return null;
     }
 }
