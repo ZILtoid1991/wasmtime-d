@@ -18,3 +18,10 @@ subPackage {
     sourcePaths "./test_loader/"
     importPaths "./test_loader/"
 }
+subPackage {
+    name "test_binding"
+    dependency "wasmtime-d" version="*"
+    targetType "executable"
+    sourcePaths "./test_binding/"
+    importPaths "./test_binding/"
+}

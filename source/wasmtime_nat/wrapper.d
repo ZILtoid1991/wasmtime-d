@@ -2,6 +2,7 @@ module wasmtime_nat.wrapper;
 ///Note to self on dtors: in some cases, they might cause issues, other times they'll be fine.
 import wasmtime.types;
 import wasmtime.funcs;
+import wasmtime.staticfuncs;
 import core.vararg;
 public import wasmtime.types : wasm_byte_t, wasm_valkind_t;
 public import wasmtime_nat.enums;
@@ -269,11 +270,11 @@ alias WasmValtypeVec = WasmVecTempl!("WasmValtype", "valtype");
 class WasmFunctype {
     wasm_functype_t* backend;
     bool isInternalRef;
-    package this(wasm_functype_t* backend) @nogc nothrow {
+    this(wasm_functype_t* backend) @nogc nothrow {
         this.backend = backend;
         isInternalRef = true;
     }
-    package this(const(wasm_functype_t)* backend) @nogc nothrow {
+    this(const(wasm_functype_t)* backend) @nogc nothrow {
         this.backend = cast(wasm_functype_t*)backend;
         isInternalRef = true;
     }
@@ -1316,7 +1317,7 @@ class WasiConfig {
 class WasmtimeError {
     wasmtime_error_t* backend;
     bool isInternalRef;
-    package this(wasmtime_error_t* backend) @nogc nothrow {
+    this(wasmtime_error_t* backend) @nogc nothrow {
         this.backend = backend;
     }
     this(const(char)* msg) @nogc nothrow {
@@ -1337,6 +1338,10 @@ class WasmtimeError {
         wasm_frame_vec_t result;
         wasmtime_error_wasm_trace(backend, &result);
         return new WasmFrameVec(result);
+    }
+    override string toString() nothrow {
+        auto msg = message();
+        return cast(string)msg.backend.data[0..msg.backend.size];
     }
 }
 class WasmtimeModule {
@@ -1559,6 +1564,27 @@ alias WasmtimeFuncUncheckedCallback = wasmtime_func_unchecked_callback_t;
 class WasmtimeFunc {
     wasmtime_func_t backend;
     WasmtimeContext context;
+    static WasmtimeFunc createnoArgs(WasmtimeContext c, WasmtimeFuncCallback callback, void* env, 
+            wasmFinalizerFuncT finalizer) nothrow {
+        return create(c, new WasmValtypeVec(), new WasmValtypeVec(), callback, env, finalizer);
+    }
+    static WasmtimeFunc create(WasmtimeContext c, WasmValtypeVec args, WasmValtypeVec ret, 
+            WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) nothrow {
+        wasmtime_func_t result;
+        wasm_functype_t* type = wasm_functype_new(&args.backend, &ret.backend);
+        wasmtime_func_new(c.backend, type, callback, env, finalizer, &result);
+        return new WasmtimeFunc(c, result);
+    }
+    /* static WasmtimeFunc create(WasmtimeContext c, WasmValtype[] args, WasmValtype[] ret, 
+            WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) nothrow {
+        WasmValtypeVec args0;
+        if (args.length) args0 = new WasmValtypeVec(args);
+        else args0 = new WasmValtypeVec();
+        WasmValtypeVec ret0;
+        if (ret.length) ret0 = new WasmValtypeVec(ret);
+        else ret0 = new WasmValtypeVec();
+        return create(c, args0, ret0, callback, env, finalizer);
+    } */
     this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) 
             @nogc nothrow {
         context = c;
@@ -1572,6 +1598,10 @@ class WasmtimeFunc {
     this(WasmtimeContext c, void* raw) @nogc nothrow {
         context = c;
         wasmtime_func_from_raw(c.backend, raw, &backend);
+    }
+    this(WasmtimeContext c, wasmtime_func_t backend) @nogc nothrow {
+        context = c;
+        this.backend = backend;
     }
     WasmFunctype type() nothrow {
         return new WasmFunctype(wasmtime_func_type(context.backend, &backend));
@@ -1776,4 +1806,9 @@ class WasmtimeTable {
         if (lastError) return new WasmtimeError(lastError);
         return null;
     }
+}
+WasmtimeError wat2wasm(const(char)[] wat, ref WasmByteVec ret) nothrow {
+    wasmtime_error_t* error = wasmtime_wat2wasm(wat.ptr, wat.length, &ret.backend);
+    if (error) return new WasmtimeError(error);
+    return null;
 }
