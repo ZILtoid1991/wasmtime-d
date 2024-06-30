@@ -98,3 +98,13 @@ enum WasmtimeTrapCode : wasmtime_trap_code_t {
     ///Execution has run out of the configured fuel amount. 
     CodeOutOfFuel       =   wasmtime_trap_code_enum.WASMTIME_TRAP_CODE_OUT_OF_FUEL,
 }
+enum WasmtimeValkind : wasmtime_valkind_t {
+    I32,
+    I64,
+    F32,
+    F64,
+    V128,
+    Funcref,
+    Anyref,
+    Externref,
+}

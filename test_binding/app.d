@@ -100,3 +100,41 @@ int helloMain() {
     writeln("All finished!");
     return 0;
 }
+//end of hello world example
+//begin of modified hello world example
+void helloCallbackD() {
+    writeln("Calling back...");
+    writeln("Hello World!");
+}
+int helloDMain() {
+    writeln("Initializing...");
+    WasmEngine engine = new WasmEngine();
+    assert(engine.backend != null);
+
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    assert(store.backend != null);
+    WasmtimeContext context = store.context();
+
+    File file = File(".examples/hello.wat", "r");
+    ulong size = file.size();
+    WasmByteVec wat = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wat.backend.data[0..wat.backend.size]);
+    file.close();
+
+    WasmByteVec wasm = new WasmByteVec();
+    WasmtimeError error = wat2wasm(cast(const(char)[])wat.backend.data[0..wat.backend.size], wasm);
+    if (error) {
+        writeln("Failed to parse WAT. Error message:");
+        writeln(error);
+        return 1;
+    }
+
+    writeln("Compiling module...");
+    WasmtimeModule mod;
+    error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+}

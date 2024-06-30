@@ -863,6 +863,7 @@ class WasmFunction {
             } */ else {
                 assert(0, "Function argument not yet supported!");
             }
+            vals ~= val;
         }
         WasmValVec argsToFunc = new WasmValVec(vals);
         result.trap = _call(argsToFunc, result.returnVal);
@@ -915,9 +916,9 @@ WasmVal wasmToVal(T)(T val) {
         return WasmVal(WasmValkind.F64, f64 : val);
     } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
         static if (t.sizeof == 4) {
-            return WasmVal(WasmValkind.I32, i32 : *cast(int*)(cast(void*)&v.of.i32));
+            return WasmVal(WasmValkind.I32, i32 : *cast(int*)(cast(void*)&val));
         } else static if (t.sizeof == 8) {
-            return WasmVal(WasmValkind.I64, i64 : *cast(int*)(cast(void*)&v.of.i64));
+            return WasmVal(WasmValkind.I64, i64 : *cast(long*)(cast(void*)&val));
         } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
     } else static if (is(T == void*)) {
         //TODO: handle external references
@@ -979,7 +980,7 @@ wasm_trap_t* wasmFuncGen(Func)(const(wasm_val_vec_t)* args, wasm_val_vec_t* resu
         } catch(Exception e2) {
             msg = excErrorMsg.idup;
         }
-        WasmTrap wt = new WasmTrap(WasmStore.defStore, &msg.backend);
+        WasmTrap wt = new WasmTrap(msg);
         wt.isInternalRef = true;
         return wt.backend;
     }
@@ -1558,12 +1559,77 @@ class WasmtimeExternref {
 }
 alias WasmtimeValunion = wasmtime_valunion_t;
 alias WasmtimeValRaw = wasmtime_val_raw_t;
-alias WasmTimeVal = wasmtime_val_t;
+alias WasmtimeVal = wasmtime_val_t;
+//alias WasmtimeValkind = wasmtime_valkind_t;
 alias WasmtimeFuncCallback = wasmtime_func_callback_t;
 alias WasmtimeFuncUncheckedCallback = wasmtime_func_unchecked_callback_t;
+/** 
+ * Converts a D value to a WasmtimeVal for automatically handled
+ * Params:
+ *   val = 
+ *   context = 
+ * Returns: 
+ */
+pragma(inline, true)
+WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothrow {
+    static if (is(T == int) || is(T == uint) || is(T == short) || is(T == ushort) || is(T == byte) || is(T == ubyte) || 
+            is(T == char) || is(T == wchar) || is(T == dchar)) {
+        return WasmtimeVal(WasmtimeValkind.I32, wasmtime_valunion_t(val));
+    } else static if (is(T == long) || is(T == ulong)) {
+        return WasmtimeVal(WasmtimeValkind.I64, wasmtime_valunion_t(i64 : val));
+    } else static if (is(T == float)) {
+        return WasmtimeVal(WasmtimeValkind.F32, wasmtime_valunion_t(f32 : val));
+    } else static if (is(T == double)) {
+        return WasmtimeVal(WasmtimeValkind.F64, wasmtime_valunion_t(f64 : val));
+    } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
+        static if (t.sizeof == 4) {
+            return WasmtimeVal(WasmtimeValkind.I32, wasmtime_valunion_t(i32 : *cast(int*)(cast(void*)&val)));
+        } else static if (t.sizeof == 8) {
+            return WasmtimeVal(WasmtimeValkind.I64, wasmtime_valunion_t(i64 : *cast(long*)(cast(void*)&val)));
+        } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
+    } else static if (is(T == class) || is(T == interface)) {   //treat classes and interfaces as external reference
+        return WasmtimeVal(WasmtimeValkind.Externref, 
+                externref : wasmtime_externref_new(context, cast(void*)val, null));
+    } else static if (is(T == struct)) {                        //treat structs as memory blobs
+        return WasmtimeVal(WasmtimeValkind.Externref, externref : wasmtime_externref_new(context, &val, null));
+    }
+    //throw new Exception("Type mismatch!");
+}
+/** 
+ * 
+ * Params:
+ *   val = 
+ *   context = 
+ * Returns: 
+ */
+T getFromWasmtimeVal(T)(WasmtimeVal val, wasmtime_context_t* context) @nogc nothrow {
+    static if (is(T == int) || is(T == uint) || is(T == short) || is(T == ushort) || is(T == byte) || is(T == ubyte) || 
+            is(T == char) || is(T == wchar) || is(T == dchar)) {
+        return cast(T)val.of.i32;
+    } else static if (is(T == long) || is(T == ulong)) {
+        return cast(T)val.of.i64;
+    } else static if (is(T == float)) {
+        return val.of.f32;
+    } else static if (is(T == double)) {
+        return val.of.f64;
+    } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
+        static if (t.sizeof == 4) {
+            return *cast(T*)(cast(void*)&val.of.i32);
+        } else static if (t.sizeof == 8) {
+            return *cast(T*)(cast(void*)&val.of.i64);
+        } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
+    } else static if (is(T == class) || is(T == interface)) {    //treat classes and interfaces as external reference
+        return cast(T)wasmtime_externref_data(context, val.of.externref);
+    } else static if (is(T == struct)) {
+        return *cast(T*)wasmtime_externref_data(context, val.of.externref);
+    }
+    //throw new Exception("Type mismatch!");
+}
+//enum wasm_valkind_t ToWasmValkind(T) 
 class WasmtimeFunc {
     wasmtime_func_t backend;
     WasmtimeContext context;
+    WasmtimeFuncCallback callbackRef;   ///Used mainly to stop the GC to collect the generated function.
     static WasmtimeFunc createnoArgs(WasmtimeContext c, WasmtimeFuncCallback callback, void* env, 
             wasmFinalizerFuncT finalizer) nothrow {
         return create(c, new WasmValtypeVec(), new WasmValtypeVec(), callback, env, finalizer);
@@ -1575,16 +1641,68 @@ class WasmtimeFunc {
         wasmtime_func_new(c.backend, type, callback, env, finalizer, &result);
         return new WasmtimeFunc(c, result);
     }
-    /* static WasmtimeFunc create(WasmtimeContext c, WasmValtype[] args, WasmValtype[] ret, 
-            WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) nothrow {
-        WasmValtypeVec args0;
-        if (args.length) args0 = new WasmValtypeVec(args);
-        else args0 = new WasmValtypeVec();
-        WasmValtypeVec ret0;
-        if (ret.length) ret0 = new WasmValtypeVec(ret);
-        else ret0 = new WasmValtypeVec();
-        return create(c, args0, ret0, callback, env, finalizer);
-    } */
+    /** 
+     * Creates a WasmtimeFunc binding for a D function.
+     * Params:
+     *   c = The context for the function.
+     *   dfunc = The D function for binding.
+     */
+    this(Func)(WasmtimeContext c) {
+        import core.stdc.string : memcpy;
+        import std.traits:Parameters, ReturnType;
+        import std.meta:staticMap;
+
+        extern(C)
+        wasm_trap_t* dfuncWrapper(void* env, wasmtime_caller_t* caller, const(wasmtime_val_t*) args, size_t nargs, 
+                wasmtime_val_t* results, size_t nresults) nothrow {
+            
+            staticMap!(Unqual,Parameters!Func) params;
+            auto cntxt = wasmtime_caller_context(caller);
+            try {
+                size_t i;
+                foreach (ref key; params) {
+                    if (i <= nargs) throw new Exception("Argument number mismatch!");
+                    key = getFromWasmtimeVal!(typeof(key))(args[i], cntxt);
+                    i++;
+                }
+            } catch (Exception e) {
+                WasmTrap wt = new WasmTrap(typeErrorMsg.idup);
+                wt.isInternalRef = true;
+                return wt.backend;
+            }
+
+            try {
+                static if (is(ReturnType!Func == void)) {
+                    Func(params);
+                    if (nresults != 0) throw new Exception("Return value number mismatch!");
+                } else {
+                    WasmtimeVal v = convToWasmtimeVal(Func(params), cntxt);
+                    if (nresults != 1) throw new Exception("Return value number mismatch!");
+                }
+            } catch (Exception e) {
+                string msg;
+                try {
+                    msg = e.toString();
+                } catch (Exception e2) {
+                    msg = excErrorMsg.idup;
+                }
+                WasmTrap wt = new WasmTrap(msg);
+                wt.isInternalRef = true;
+                return wt.backend;
+            }
+            return null;
+        }
+        context = c;
+        callbackRef = &dfuncWrapper;
+
+        staticMap!(Unqual,Parameters!Func) params;
+        wasm_valtype_t*[] wasmArgs;
+        foreach (ref key; params) {
+            wasmArgs ~= wasm_valtype_new();
+        }
+    }
+    //this(O, Func)(WasmtimeContext c) {}
+    
     this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) 
             @nogc nothrow {
         context = c;
@@ -1606,7 +1724,7 @@ class WasmtimeFunc {
     WasmFunctype type() nothrow {
         return new WasmFunctype(wasmtime_func_type(context.backend, &backend));
     }
-    WasmtimeError call(WasmTimeVal[] args, WasmTimeVal[] results, ref WasmTrap trap) nothrow {
+    WasmtimeError call(WasmtimeVal[] args, WasmtimeVal[] results, ref WasmTrap trap) nothrow {
         wasm_trap_t* trap0;
         wasmtime_error_t* error = wasmtime_func_call(context.backend, &backend, args.ptr, args.length, results.ptr, 
                 results.length, &trap0);
@@ -1625,24 +1743,75 @@ class WasmtimeFunc {
     void* toRaw() @nogc nothrow {
         return wasmtime_func_to_raw(context.backend, &backend);
     }
+    /** 
+     * Easy D wrapper around  function calls.
+     * Params:
+     *   retnum = The number of returned values, can be zero.
+     * Returns: A WasmtimeResult struct with the results
+     */
+    WasmtimeResult opCall(size_t retnum, ...) nothrow {
+        WasmtimeResult result;
+        WasmtimeVal[] vals;
+        result.context = context.backend;
+        result.retVal.length = retnum;
+        vals.length = _arguments.length;
+        for (int i ; i < _arguments.length ; i++) {
+            if (_arguments[i] == typeid(int)) {
+                vals[i] = convToWasmtimeVal(va_arg!int(_argptr), result.context);
+            } else if (_arguments[i] == typeid(short)) {
+                vals[i] = convToWasmtimeVal(va_arg!short(_argptr), result.context);
+            } else if (_arguments[i] == typeid(byte)) {
+                vals[i] = convToWasmtimeVal(va_arg!byte(_argptr), result.context);
+            } else if (_arguments[i] == typeid(uint)) {
+                vals[i] = convToWasmtimeVal(va_arg!uint(_argptr), result.context);
+            } else if (_arguments[i] == typeid(ushort)) {
+                vals[i] = convToWasmtimeVal(va_arg!ushort(_argptr), result.context);
+            } else if (_arguments[i] == typeid(ubyte)) {
+                vals[i] = convToWasmtimeVal(va_arg!ubyte(_argptr), result.context);
+            } else if (_arguments[i] == typeid(long)) {
+                vals[i] = convToWasmtimeVal(va_arg!long(_argptr), result.context);
+            } else if (_arguments[i] == typeid(ulong)) {
+                vals[i] = convToWasmtimeVal(va_arg!ulong(_argptr), result.context);
+            } else if (_arguments[i] == typeid(float)) {
+                vals[i] = convToWasmtimeVal(va_arg!float(_argptr), result.context);
+            } else if (_arguments[i] == typeid(double)) {
+                vals[i] = convToWasmtimeVal(va_arg!double(_argptr), result.context);
+            }
+        }
+        wasm_trap_t* trap;
+        wasmtime_error_t* error = wasmtime_func_call(context.backend, &backend, vals.ptr, vals.length, 
+                result.retVal.ptr, result.retVal.length, &trap);
+        if (trap) result.trap = new WasmTrap(trap);
+        if (error) result.error = new WasmtimeError(error);
+        return result;
+    }
+}
+struct WasmtimeResult {
+    WasmtimeVal[]   retVal;
+    WasmtimeError   error;
+    WasmTrap        trap;
+    wasmtime_context_t* context;
+    T get(T)() @nogc nothrow {
+        return getFromWasmtimeVal(retVal, context);
+    }
 }
 class WasmtimeGlobal {
     static wasmtime_error_t* lastError;
     wasmtime_global_t backend;
     WasmtimeContext context;
-    this(WasmtimeContext c, WasmGlobaltype type, WasmTimeVal val) @nogc nothrow {
+    this(WasmtimeContext c, WasmGlobaltype type, WasmtimeVal val) @nogc nothrow {
         context = c;
         lastError = wasmtime_global_new(c.backend, type.backend, &val, &backend);
     }
     WasmGlobaltype type() nothrow {
         return new WasmGlobaltype(wasmtime_global_type(context.backend, &backend));
     }
-    WasmTimeVal get() nothrow {
-        WasmTimeVal result;
+    WasmtimeVal get() nothrow {
+        WasmtimeVal result;
         wasmtime_global_get(context.backend, &backend, &result);
         return result;
     }
-    WasmtimeError set(WasmTimeVal val) nothrow {
+    WasmtimeError set(WasmtimeVal val) nothrow {
         wasmtime_error_t* error = wasmtime_global_set(context.backend, &backend, &val);
         if (error) return new WasmtimeError(error);
         return null;
@@ -1784,16 +1953,16 @@ class WasmtimeTable {
     static wasmtime_error_t* lastError;
     wasmtime_table_t backend;
     WasmtimeContext context;
-    this(WasmtimeContext store, WasmTabletype type, WasmTimeVal* init) @nogc nothrow {
+    this(WasmtimeContext store, WasmTabletype type, WasmtimeVal* init) @nogc nothrow {
         lastError = wasmtime_table_new(store.backend, type.backend, init, &backend);
     }
     WasmTabletype type() nothrow {
         return new WasmTabletype(wasmtime_table_type(context.backend, &backend));
     }
-    bool get(uint index, ref WasmTimeVal val) @nogc nothrow {
+    bool get(uint index, ref WasmtimeVal val) @nogc nothrow {
         return wasmtime_table_get(context.backend, &backend, index, &val);
     }
-    WasmtimeError set(uint index, WasmTimeVal val) nothrow {
+    WasmtimeError set(uint index, WasmtimeVal val) nothrow {
         lastError = wasmtime_table_set(context.backend, &backend, index, &val);
         if (lastError) return new WasmtimeError(lastError);
         return null;
@@ -1801,7 +1970,7 @@ class WasmtimeTable {
     uint size() @nogc nothrow {
         return wasmtime_table_size(context.backend, &backend);
     }
-    WasmtimeError grow(uint delta, WasmTimeVal* init, ref uint prevSize) nothrow {
+    WasmtimeError grow(uint delta, WasmtimeVal* init, ref uint prevSize) nothrow {
         lastError = wasmtime_table_grow(context.backend, &backend, delta, init, &prevSize);
         if (lastError) return new WasmtimeError(lastError);
         return null;
