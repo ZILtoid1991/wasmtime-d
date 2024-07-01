@@ -904,6 +904,9 @@ T wasmGetFromVal(T)(WasmVal v) {
     }
     throw new Exception("Type mismatch!");
 }
+/**
+ * Converts D value to wasmval automatically.
+ */
 WasmVal wasmToVal(T)(T val) {
     static if (is(T == int) || is(T == uint) || is(T == short) || is(T == ushort) || is(T == byte) || is(T == ubyte) || 
             is(T == char) || is(T == wchar) || is(T == dchar)) {
@@ -1566,9 +1569,9 @@ alias WasmtimeFuncUncheckedCallback = wasmtime_func_unchecked_callback_t;
 /** 
  * Converts a D value to a WasmtimeVal for automatically handled
  * Params:
- *   val = 
- *   context = 
- * Returns: 
+ *   val = The value to be converted.
+ *   context = Context for Externref values, etc.
+ * Returns: A WasmtimeVal on success.
  */
 pragma(inline, true)
 WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothrow {
@@ -1596,11 +1599,11 @@ WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothr
     //throw new Exception("Type mismatch!");
 }
 /** 
- * 
+ * Converts a Wasmtime value to the given T type.
  * Params:
- *   val = 
- *   context = 
- * Returns: 
+ *   val = The value to be converted.
+ *   context = Context for any Externref, etc. kind of values.
+ * Returns: A value of type T which the closest matches the type held by val.
  */
 T getFromWasmtimeVal(T)(WasmtimeVal val, wasmtime_context_t* context) @nogc nothrow {
     static if (is(T == int) || is(T == uint) || is(T == short) || is(T == ushort) || is(T == byte) || is(T == ubyte) || 
@@ -1624,6 +1627,27 @@ T getFromWasmtimeVal(T)(WasmtimeVal val, wasmtime_context_t* context) @nogc noth
         return *cast(T*)wasmtime_externref_data(context, val.of.externref);
     }
     //throw new Exception("Type mismatch!");
+}
+pragma(inline, true)
+wasm_valtype_t* toWasmValtype(T)() @nogc nothrow {
+    static if (is(T == int) || is(T == uint) || is(T == short) || is(T == ushort) || is(T == byte) || is(T == ubyte) || 
+            is(T == char) || is(T == wchar) || is(T == dchar)) {
+        return wasm_valtype_new(wasm_valkind_enum.WASM_I32);
+    } else static if (is(T == long) || is(T == ulong)) {
+        return wasm_valtype_new(wasm_valkind_enum.WASM_I64);
+    } else static if (is(T == float)) {
+        return wasm_valtype_new(wasm_valkind_enum.WASM_F32);
+    } else static if (is(T == double)) {
+        return wasm_valtype_new(wasm_valkind_enum.WASM_F64);
+    } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
+        static if (t.sizeof == 4) {
+            return *cast(T*)(cast(void*)&val.of.i32);
+        } else static if (t.sizeof == 8) {
+            return *cast(T*)(cast(void*)&val.of.i64);
+        } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
+    } else static if (is(T == struct) || is(T == class) || is(T == interface)) {
+        return wasm_valtype_new(wasm_valkind_enum.WASM_EXTERNREF);
+    }
 }
 //enum wasm_valkind_t ToWasmValkind(T) 
 class WasmtimeFunc {
