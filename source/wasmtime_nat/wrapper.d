@@ -1671,7 +1671,7 @@ class WasmtimeFunc {
      *   c = The context for the function.
      *   dfunc = The D function for binding.
      */
-    this(Func)(WasmtimeContext c) {
+    this(Func)(WasmtimeContext c, void* env = null, wasmFinalizerFuncT finalizer = null) {
         import core.stdc.string : memcpy;
         import std.traits:Parameters, ReturnType;
         import std.meta:staticMap;
@@ -1720,10 +1720,21 @@ class WasmtimeFunc {
         callbackRef = &dfuncWrapper;
 
         staticMap!(Unqual,Parameters!Func) params;
-        wasm_valtype_t*[] wasmArgs;
+        wasm_valtype_t*[] wasmArgs, wasmRes;
+        wasm_valtype_vec_t wasmArgsV, wasmResV;
         foreach (ref key; params) {
-            wasmArgs ~= wasm_valtype_new();
+            wasmArgs ~= toWasmValtype!(typeof(key))();
         }
+        if (wasmArgs.length) wasm_valtype_vec_new(&wasmArgsV, wasmArgs.length, wasmArgs.ptr);
+        else wasm_valtype_vec_new_empty(&wasmArgsV);
+        static if (is(ReturnType!Func == void)) {
+            wasm_valtype_vec_new_empty(&wasmResV);
+        } else {
+            wasmRes ~= toWasmValtype!(ReturnType!Func)();
+            wasm_valtype_vec_new(&wasmResV, wasmRes.length, wasmRes.ptr);
+        }
+        wasm_functype_t* funcType = wasm_functype_new(&wasmArgsV, &wasmResV);
+        wasmtime_func_new(c.backend, funcType, callbackRef, env, finalizer, &backend);
     }
     //this(O, Func)(WasmtimeContext c) {}
     
