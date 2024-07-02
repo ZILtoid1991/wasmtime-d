@@ -1671,7 +1671,7 @@ class WasmtimeFunc {
      *   c = The context for the function.
      *   dfunc = The D function for binding.
      */
-    this(Func)(WasmtimeContext c, void* env = null, wasmFinalizerFuncT finalizer = null) {
+    static WasmtimeFunc createFuncBinding(alias Func)(WasmtimeContext c, void* env = null, wasmFinalizerFuncT finalizer = null) {
         import core.stdc.string : memcpy;
         import std.traits:Parameters, ReturnType;
         import std.meta:staticMap;
@@ -1716,8 +1716,9 @@ class WasmtimeFunc {
             }
             return null;
         }
-        context = c;
-        callbackRef = &dfuncWrapper;
+        WasmtimeFunc result = new WasmtimeFunc();
+        result.context = c;
+        result.callbackRef = &dfuncWrapper;
 
         staticMap!(Unqual,Parameters!Func) params;
         wasm_valtype_t*[] wasmArgs, wasmRes;
@@ -1734,10 +1735,11 @@ class WasmtimeFunc {
             wasm_valtype_vec_new(&wasmResV, wasmRes.length, wasmRes.ptr);
         }
         wasm_functype_t* funcType = wasm_functype_new(&wasmArgsV, &wasmResV);
-        wasmtime_func_new(c.backend, funcType, callbackRef, env, finalizer, &backend);
+        wasmtime_func_new(c.backend, funcType, result.callbackRef, env, finalizer, &result.backend);
+        return result;
     }
     //this(O, Func)(WasmtimeContext c) {}
-    
+    package this() @nogc nothrow {}
     this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) 
             @nogc nothrow {
         context = c;

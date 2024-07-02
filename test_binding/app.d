@@ -10,13 +10,17 @@ import std.stdio;
 
 int main(string[] args) {
     loadWasmtime();
-    return helloMain();
+    if (args.length <= 1) args ~= "";
+    switch (args[1]) {
+        case "hellod": return helloDMain();
+        default: return helloMain();
+    }
 }
 
 //Begin of hello world example
 extern(C)
-wasm_trap_t* helloCallback(void* env, wasmtime_caller_t* caller, const WasmTimeVal* args, size_t nargs, 
-        WasmTimeVal* res, size_t nres) nothrow {
+wasm_trap_t* helloCallback(void* env, wasmtime_caller_t* caller, const WasmtimeVal* args, size_t nargs, 
+        WasmtimeVal* res, size_t nres) nothrow {
     try {
         writeln("Calling back...");
         writeln("Hello World!");
@@ -104,7 +108,7 @@ int helloMain() {
 //begin of modified hello world example
 void helloCallbackD() {
     writeln("Calling back...");
-    writeln("Hello World!");
+    writeln("Hello D!");
 }
 int helloDMain() {
     writeln("Initializing...");
@@ -137,4 +141,46 @@ int helloDMain() {
         writeln(error);
         return 1;
     }
+
+    writeln("Creating callback...");
+    WasmtimeFunc hello = WasmtimeFunc.createFuncBinding!(helloCallbackD)(context);
+
+    writeln("Instantiating module...");
+    WasmTrap trap;
+    WasmtimeInstance instance;
+    WasmtimeExtern _import;
+    _import.kind = WasmExternkind.Func;
+    _import.of.func = hello.backend;
+    instance = new WasmtimeInstance(context, mod, [_import]);
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("Extracting export...");
+    WasmtimeExtern run = instance.exportGet("run");
+    assert(run.kind == WasmExternkind.Func);
+
+    writeln("Calling export...");
+    WasmtimeFunc wasmentry = new WasmtimeFunc(context, run.of.func);
+    auto funcResult = wasmentry(0);
+    if (funcResult.error || funcResult.trap) {
+        writeln("Failed to compile module. Error message:");
+        if (funcResult.error) writeln(funcResult.error);
+        if (funcResult.trap) {
+            wasmtime_trap_code_t code;
+            funcResult.trap.code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("All finished!");
+    return 0;
 }
