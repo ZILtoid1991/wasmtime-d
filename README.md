@@ -75,5 +75,20 @@ Extracting an export function, then executing it is as easy as:
 ```d
 WasmtimeExtern run = instance.exportGet("run");
 WasmtimeFunc wasmentrypoint = new WasmtimeFunc(context, run.of.func);
+//Number is the expected return arguments, after that the function can accept any number of arguments as long as the variadic function is built to deal with it.
 auto funcResult = wasmentrypoint(0);
 ```
+
+(Manual binding is still available if needed.)
+
+# Roadmap
+
+* Basic functionality works as of now.
+* Handling of classes, interfaces, and structs as arguments are untested.
+* Automatic function binding generation template factory works, untested for function arguments.
+
+## Things need to be done
+
+* Shared memory handling.
+* Member function binding generation.
+* Asynchronous functions.
