@@ -377,7 +377,10 @@ class WasmMemorytype {
     }
     this(const WasmLimits limits) @nogc nothrow {
         backend = wasm_memorytype_new(&limits);
-    } 
+    }
+    this(const(WasmLimits)* limits) @nogc nothrow {
+        backend = wasm_memorytype_new(limits);
+    }
     this(WasmMemorytype other) @nogc nothrow {
         backend = wasm_memorytype_copy(other.backend);
     }
@@ -875,7 +878,8 @@ struct WasmResult {
     WasmValVec      returnVal;///Contains the return value vector itself.
     WasmTrap        trap;///Contains any trap that has been encountered during the execution of the function, null otherwise.
 }
-///UDA, structs marked with it will be packed into a WASM val as a single integer. Struct must be of size 4 or 8.
+///UDA, structs marked with it will be packed into a WASM val as a single integer. Struct must be of size 4 or 8, but
+///sometimes 16 is also accepted, depending on API usage.
 ///Note that client languages might not be compatible with it, but otherwise can be useful when speed is important.
 struct WasmCfgStructPkg {}
 ///UDA, structs marked with it will be packed field-by-field.
@@ -1278,9 +1282,9 @@ class WasiConfig {
     this() @nogc nothrow {
         backend = wasi_config_new();
     }
-    ~this() @nogc nothrow {
+    /* ~this() @nogc nothrow {
         if (!isInternalRef) wasi_config_delete(backend);
-    }
+    } */
     void setArgv(int argc, const(char*)* argv) {
         wasi_config_set_argv(backend, argc, argv);
     }
@@ -1356,6 +1360,9 @@ class WasmtimeModule {
         if (error) return new WasmtimeError(error);
         if (creation) mod = new WasmtimeModule(creation);
         return null;
+    }
+    static WasmtimeError create(WasmEngine engine, char[] wasm, ref WasmtimeModule mod) nothrow {
+        return create(engine, cast(ubyte[])wasm, mod);
     }
     static WasmtimeError deserialize(WasmEngine engine, ubyte[] wasm, ref WasmtimeModule mod) nothrow {
         wasmtime_module_t* creation;
@@ -1585,11 +1592,14 @@ WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothr
     } else static if (is(T == double)) {
         return WasmtimeVal(WasmtimeValkind.F64, wasmtime_valunion_t(f64 : val));
     } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
-        static if (t.sizeof == 4) {
-            return WasmtimeVal(WasmtimeValkind.I32, wasmtime_valunion_t(i32 : *cast(int*)(cast(void*)&val)));
-        } else static if (t.sizeof == 8) {
-            return WasmtimeVal(WasmtimeValkind.I64, wasmtime_valunion_t(i64 : *cast(long*)(cast(void*)&val)));
-        } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
+        static if (T.sizeof == 4) {
+            return WasmtimeVal(WasmtimeValkind.U32, wasmtime_valunion_t(u32 : *cast(int*)(cast(void*)&val)));
+        } else static if (T.sizeof == 8) {
+            return WasmtimeVal(WasmtimeValkind.U64, wasmtime_valunion_t(u64 : *cast(long*)(cast(void*)&val)));
+        } else static if (T.sizeof == 16) {
+            return WasmtimeVal(WasmtimeValkind.V128, 
+                    wasmtime_valunion_t(v128 : *cast(wasmtime_v128*)(cast(void*)&val)));
+        } else static assert(0, "Struct must be of exactly the size of 4, 8, or 16 bytes!");
     } else static if (is(T == class) || is(T == interface)) {   //treat classes and interfaces as external reference
         return WasmtimeVal(WasmtimeValkind.Externref, 
                 externref : wasmtime_externref_new(context, cast(void*)val, null));
@@ -1616,11 +1626,13 @@ T getFromWasmtimeVal(T)(WasmtimeVal val, wasmtime_context_t* context) @nogc noth
     } else static if (is(T == double)) {
         return val.of.f64;
     } else static if (hasUDA!(T, "WasmCfgStructPkg")) {
-        static if (t.sizeof == 4) {
+        static if (T.sizeof == 4) {
             return *cast(T*)(cast(void*)&val.of.i32);
-        } else static if (t.sizeof == 8) {
+        } else static if (T.sizeof == 8) {
             return *cast(T*)(cast(void*)&val.of.i64);
-        } else static assert(0, "Struct must be of exactly the size of 4 or 8 bytes!");
+        } else static if (T.sizeof == 16) {
+            return *cast(T*)(cast(void*)&val.of.v128);
+        } else static assert(0, "Struct must be of exactly the size of 4, 8, or 16 bytes!");
     } else static if (is(T == class) || is(T == interface)) {    //treat classes and interfaces as external reference
         return cast(T)wasmtime_externref_data(context, val.of.externref);
     } else static if (is(T == struct)) {
@@ -1823,13 +1835,28 @@ class WasmtimeFunc {
         return result;
     }
 }
+///Implementation native stuct, with no C API equilavance.
+///Created to make return value handling easier.
 struct WasmtimeResult {
     WasmtimeVal[]   retVal;
     WasmtimeError   error;
     WasmTrap        trap;
     wasmtime_context_t* context;
     T get(T)() @nogc nothrow {
-        return getFromWasmtimeVal(retVal, context);
+        static if (hasUDA!(T, "WasmCfgStructByField")) {
+            T result;
+            size_t cntr;
+            static foreach (ref field ; result.tupleof) {
+                field = getFromWasmtimeVal!(typeof(field))(retVal[0], context);
+                cntr++;
+            }
+            return result;
+        } else {
+            return getFromWasmtimeVal!T(retVal[0], context);
+        }
+    }
+    T getNth(T)(size_t n) @nogc nothrow {
+        return getFromWasmtimeVal!T(retVal[n], context);
     }
 }
 class WasmtimeGlobal {
@@ -1862,6 +1889,10 @@ class WasmtimeInstance {
     this(WasmtimeContext c, WasmtimeModule mod, WasmtimeExtern[] imports) @nogc nothrow {
         context = c;
         lastError = wasmtime_instance_new(c.backend, mod.backend, imports.ptr, imports.length, &backend, &lastTrap);
+    }
+    package this(WasmtimeContext c, wasmtime_instance_t backend) @nogc nothrow {
+        context = c;
+        this.backend = backend;
     }
     WasmtimeExtern exportGet(string name) @nogc nothrow {
         WasmtimeExtern result;
@@ -1916,19 +1947,21 @@ class WasmtimeLinker {
         if (error) return new WasmtimeError(error);
         return null;
     }
-    WasmtimeError defineInstance(WasmtimeContext store, string name, WasmtimeInstance instance) nothrow {
+    WasmtimeError defineInstance(WasmtimeContext store, string name, ref WasmtimeInstance instance) nothrow {
         wasmtime_error_t* error = 
                 wasmtime_linker_define_instance(backend, store.backend, name.ptr, name.length, &instance.backend);
         if (error) return new WasmtimeError(error);
+        //instance = new WasmtimeInstance(store, result);
         return null;
     }
-    WasmtimeError instantiate(WasmtimeContext store, WasmtimeModule mod, WasmtimeInstance instance, 
+    WasmtimeError instantiate(WasmtimeContext store, WasmtimeModule mod, ref WasmtimeInstance instance, 
             ref WasmTrap trap) nothrow {
         wasm_trap_t* trap0;
-        wasmtime_error_t* error = 
-                wasmtime_linker_instantiate(backend, store.backend, mod.backend, &instance.backend, &trap0);
+        wasmtime_instance_t result;
+        wasmtime_error_t* error = wasmtime_linker_instantiate(backend, store.backend, mod.backend, &result, &trap0);
         if (trap0) trap = new WasmTrap(trap0);
         if (error) return new WasmtimeError(error);
+        instance = new WasmtimeInstance(store, result);
         return null;
     }
     WasmtimeError setModule(WasmtimeContext store, string name, WasmtimeModule mod) nothrow {
@@ -1955,11 +1988,16 @@ class WasmtimeLinker {
 }
 class WasmtimeMemory {
     static wasmtime_error_t* lastError;
+    static WasmtimeError lastError_D;
     wasmtime_memory_t backend;
     WasmtimeContext context;
     this(WasmtimeContext store, WasmMemorytype type) @nogc nothrow {
         context = store;
         lastError = wasmtime_memory_new(store.backend, type.backend, &backend);
+    }
+    this(WasmtimeContext store, wasmtime_memory_t backend) @nogc nothrow {
+        context = store;
+        this.backend = backend;
     }
     WasmMemorytype type() nothrow {
         return new WasmMemorytype(wasmtime_memory_type(context.backend, &backend));
@@ -1975,7 +2013,7 @@ class WasmtimeMemory {
     }
     WasmtimeError grow(ulong delta, ulong* prevSize) nothrow {
         lastError = wasmtime_memory_grow(context.backend, &backend, delta, prevSize);
-        if (lastError) return new WasmtimeError(lastError);
+        if (lastError) return lastError_D = new WasmtimeError(lastError);
         return null;
     }
 }

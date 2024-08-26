@@ -15,6 +15,8 @@ int main(string[] args) {
     switch (args[1]) {
         case "hellod": return helloDMain();
         case "gcd": return gcdMain(args[2..$]);
+        case "linearMemory": return linearMemoryMain();
+        case "linking": return linkingMain();
         default: return helloMain();
     }
 }
@@ -251,5 +253,187 @@ int gcdMain(string[] args) {
     assert(gcdRes.retVal.length);
     assert(gcdRes.retVal[0].kind == WasmtimeValkind.I32);
     writeln("Result: ", gcdRes.retVal[0].of.i32);
+    return 0;
+}
+int linearMemoryMain() {
+    writeln("Initializing...");
+    WasmEngine engine = new WasmEngine();
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    WasmtimeContext context = store.context();
+
+    File file = File(".examples/memory.wat", "r");
+    ulong size = file.size();
+    WasmByteVec wat = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wat.backend.data[0..wat.backend.size]);
+
+    WasmByteVec wasm = new WasmByteVec();
+    WasmtimeError error = wat2wasm(cast(const(char)[])wat.backend.data[0..wat.backend.size], wasm);
+    if (error) {
+        writeln("Failed to parse WAT. Error message:");
+        writeln(error);
+        return 1;
+    }
+
+    WasmtimeModule mod;
+    error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+
+    WasmtimeInstance instance;
+    instance = new WasmtimeInstance(context, mod, []);
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    WasmtimeMemory memory;
+    WasmtimeFunc sizeFunc, loadFunc, storeFunc;
+    WasmtimeExtern item;
+
+    item = instance.exportGet("memory");
+    assert(!instance.lastError);
+    memory = new WasmtimeMemory(context, item.of.memory);
+
+    item = instance.exportGet("size");
+    assert(!instance.lastError);
+    sizeFunc = new WasmtimeFunc(context, item.of.func);
+
+    item = instance.exportGet("load");
+    assert(!instance.lastError);
+    loadFunc = new WasmtimeFunc(context, item.of.func);
+
+    item = instance.exportGet("store");
+    assert(!instance.lastError);
+    storeFunc = new WasmtimeFunc(context, item.of.func);
+
+    writeln("Checking memory...");
+    assert(memory.size() == 2);
+    assert(memory.dataSize() == 0x20000);
+    assert(memory.data()[0] == 0);
+    assert(memory.data()[0x1000] == 1);
+    assert(memory.data()[0x1003] == 4);
+
+    assert(sizeFunc(1).get!int() == 2);
+    assert(loadFunc(1, 0).get!int() == 0);
+    assert(loadFunc(1, 0x1000).get!int() == 1);
+    assert(loadFunc(1, 0x1003).get!int() == 4);
+    assert(loadFunc(1, 0x1_ffff).get!int() == 0);
+    assert(loadFunc(1, 0x2_0000).trap);
+
+    writeln("Mutating memory...");
+    memory.data()[0x1003] = 0x05;
+    storeFunc(0, 0x1002, 6);
+    assert(storeFunc(0, 0x2_0000, 0).trap);
+
+    assert(memory.data()[0x1002] == 6);
+    assert(memory.data()[0x1003] == 5);
+    assert(loadFunc(1, 0x1002).get!int() == 6);
+    assert(loadFunc(1, 0x1003).get!int() == 5);
+
+    writeln("Growing memory...");
+    ulong oldSize;
+    if (memory.grow(1, &oldSize)) {
+        writeln("Failed to grow memory: ", memory.lastError_D.toString);
+    }
+    assert(memory.size() == 3);
+    assert(memory.dataSize() == 0x3_0000);
+
+    assert(!(loadFunc(1, 0x2_0000).trap));
+    assert(!(storeFunc(0, 0x2_0000, 0).trap));
+    assert(loadFunc(1, 0x3_0000).trap);
+    assert(storeFunc(0, 0x3_0000, 0).trap);
+
+    assert(memory.grow(1, &oldSize));
+    memory.lastError_D = null;
+    assert(!memory.grow(0, &oldSize), memory.lastError_D.toString);
+
+    writeln("Creating stand-alone memory...");
+    WasmLimits limits = WasmLimits(5, 5);
+    WasmMemorytype memoryType = new WasmMemorytype(limits);
+    WasmtimeMemory memory2 = new WasmtimeMemory(context, memoryType);
+    assert(!memory2.lastError_D, memory2.lastError_D.toString);
+    assert(memory2.size() == 5);
+    return 0;
+}
+int wasiMain() {
+    return 0;
+}
+int linkingMain() {
+    writeln("Initializing...");
+    WasmtimeError error = null;
+    WasmTrap trap = null;
+    WasmEngine engine = new WasmEngine();
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    WasmtimeContext context = store.context();
+
+    File file1 = File(".examples/linking1.wat", "r");
+    File file2 = File(".examples/linking2.wat", "r");
+    ulong size1 = file1.size();
+    ulong size2 = file2.size();
+    WasmByteVec linkingFile1 = new WasmByteVec(cast(size_t)size1);
+    WasmByteVec linkingFile2 = new WasmByteVec(cast(size_t)size2);
+    file1.rawRead(linkingFile1.backend.data[0..linkingFile1.backend.size]);
+    file2.rawRead(linkingFile2.backend.data[0..linkingFile2.backend.size]);
+    
+    writeln("Compiling...");
+    WasmByteVec linkingBC1 = new WasmByteVec();
+    WasmByteVec linkingBC2 = new WasmByteVec();
+    error = wat2wasm(cast(const(char)[])linkingFile1.backend.data[0..linkingFile1.backend.size], linkingBC1);
+    assert(!error, error.toString());
+    error = wat2wasm(cast(const(char)[])linkingFile2.backend.data[0..linkingFile2.backend.size], linkingBC2);
+    assert(!error, error.toString());
+    writeln("Creating modules...");
+    WasmtimeModule linkingMod1, linkingMod2;
+    
+    error = WasmtimeModule.create(engine, linkingBC1.backend.data[0..linkingBC1.backend.size], linkingMod1);
+    assert(!error, error.toString());
+    error = WasmtimeModule.create(engine, linkingBC2.backend.data[0..linkingBC2.backend.size], linkingMod2);
+    assert(!error, error.toString());
+
+    writeln("Setting up WASI...");
+    WasiConfig wasiCfg = new WasiConfig();
+    wasiCfg.inheritArgv();
+    wasiCfg.inheritEnv();
+    wasiCfg.inheritStdin();
+    wasiCfg.inheritStdout();
+    wasiCfg.inheritStderr();
+
+    error = context.setWasi(wasiCfg);
+    assert(!error, error.toString());
+
+    writeln("Linking...");
+    WasmtimeLinker linker = new WasmtimeLinker(engine);
+    error = linker.defineWASI();
+    assert(!error, error.toString());
+
+    WasmtimeInstance linking2;
+    error = linker.instantiate(context, linkingMod2, linking2, trap);
+    assert(!error, error.toString());
+
+    error = linker.defineInstance(context, "linking2", linking2);
+    assert(!error, error.toString());
+
+    WasmtimeInstance linking1;
+    error = linker.instantiate(context, linkingMod1, linking1, trap);
+    assert(!error, error.toString());
+
+    error = linker.defineInstance(context, "linking1", linking1);
+    assert(!error, error.toString());
+
+    writeln("Executing main function...");
+    WasmtimeFunc runFunc = new WasmtimeFunc(context, linking1.exportGet("run").of.func);
+    WasmtimeResult result = runFunc(0);
+    assert(!result.error, result.error.toString());
+    assert(!result.trap, result.trap.toString());
+
     return 0;
 }
