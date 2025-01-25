@@ -1601,10 +1601,11 @@ WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothr
                     wasmtime_valunion_t(v128 : *cast(wasmtime_v128*)(cast(void*)&val)));
         } else static assert(0, "Struct must be of exactly the size of 4, 8, or 16 bytes!");
     } else static if (is(T == class) || is(T == interface)) {   //treat classes and interfaces as external reference
-        return WasmtimeVal(WasmtimeValkind.Externref, 
-                externref : wasmtime_externref_new(context, cast(void*)val, null));
+        return WasmtimeVal(WasmtimeValkind.Externref, wasmtime_valunion_t(
+                externref : wasmtime_externref_new(context, cast(void*)val, null)));
     } else static if (is(T == struct)) {                        //treat structs as memory blobs
-        return WasmtimeVal(WasmtimeValkind.Externref, externref : wasmtime_externref_new(context, &val, null));
+        return WasmtimeVal(WasmtimeValkind.Externref, wasmtime_valunion_t
+                (externref : wasmtime_externref_new(context, &val, null)));
     }
     //throw new Exception("Type mismatch!");
 }
@@ -1661,6 +1662,7 @@ wasm_valtype_t* toWasmValtype(T)() @nogc nothrow {
         return wasm_valtype_new(wasm_valkind_enum.WASM_EXTERNREF);
     }
 }
+//auto funcToClassMethod(T...)(...) {}
 //enum wasm_valkind_t ToWasmValkind(T) 
 class WasmtimeFunc {
     wasmtime_func_t backend;
@@ -1679,11 +1681,15 @@ class WasmtimeFunc {
     }
     /** 
      * Creates a WasmtimeFunc binding for a D function.
+     * Template params:
+     *   Func = The D function that needs a binding to generated for.
      * Params:
      *   c = The context for the function.
-     *   dfunc = The D function for binding.
+     *   env = Environment for the function (currently unused).
+     *   finalizer = Finalizer function pointer.
      */
-    static WasmtimeFunc createFuncBinding(alias Func)(WasmtimeContext c, void* env = null, wasmFinalizerFuncT finalizer = null) {
+    static WasmtimeFunc createFuncBinding(alias Func)(WasmtimeContext c,
+            void* env = null, wasmFinalizerFuncT finalizer = null) {
         import core.stdc.string : memcpy;
         import std.traits:Parameters, ReturnType;
         import std.meta:staticMap;
@@ -1691,17 +1697,18 @@ class WasmtimeFunc {
         extern(C)
         wasm_trap_t* dfuncWrapper(void* env, wasmtime_caller_t* caller, const(wasmtime_val_t*) args, size_t nargs, 
                 wasmtime_val_t* results, size_t nresults) nothrow {
-            
+
             staticMap!(Unqual,Parameters!Func) params;
             auto cntxt = wasmtime_caller_context(caller);
             try {
                 size_t i;
                 foreach (ref key; params) {
-                    if (i <= nargs) throw new Exception("Argument number mismatch!");
+                    if (i >= nargs) throw new Exception("Argument number mismatch!");
                     key = getFromWasmtimeVal!(typeof(key))(args[i], cntxt);
                     i++;
                 }
             } catch (Exception e) {
+                // WasmTrap wt = new WasmTrap(Func.stringof);
                 WasmTrap wt = new WasmTrap(typeErrorMsg.idup);
                 wt.isInternalRef = true;
                 return wt.backend;
@@ -1711,9 +1718,19 @@ class WasmtimeFunc {
                 static if (is(ReturnType!Func == void)) {
                     Func(params);
                     if (nresults != 0) throw new Exception("Return value number mismatch!");
+                } else static if (is(ReturnType!Func == struct) && hasUDA!(ReturnType!Func, "WasmCfgStructByField")){
+                    auto v = Func(params);
+                    size_t i;
+                    static foreach (field ; v.tupleof) {
+                        if (nresults <= i) throw new Exception("Return value number mismatch!");
+                        results[i] = convToWasmtimeVal(v.field, cntxt);
+                        i++;
+                    }
+                    if (nresults != i) throw new Exception("Return value number mismatch!");
                 } else {
                     WasmtimeVal v = convToWasmtimeVal(Func(params), cntxt);
                     if (nresults != 1) throw new Exception("Return value number mismatch!");
+                    results[0] = v;
                 }
             } catch (Exception e) {
                 string msg;
@@ -1750,7 +1767,98 @@ class WasmtimeFunc {
         wasmtime_func_new(c.backend, funcType, result.callbackRef, env, finalizer, &result.backend);
         return result;
     }
-    //this(O, Func)(WasmtimeContext c) {}
+    /**
+     * Creates a WasmtimeFunc binding for a method of a D class. The class itself is treated as an `externref` type on the WASM side.
+     * Template params:
+     *   Func = The D function that needs a binding to generated for.
+     * Params:
+     *   c = The context for the function.
+     *   env = Environment for the function (currently unused).
+     *   finalizer = Finalizer function pointer.
+     * Note: It is currently unknown if the D WASM ABI even has the `externref` type, let alone how it is initiated.
+     */
+    static WasmtimeFunc createMethodBinding(alias Func)(WasmtimeContext c,
+            void* env = null, wasmFinalizerFuncT finalizer = null) {
+        import core.stdc.string : memcpy;
+        import std.traits:Parameters, ReturnType;
+        import std.meta:staticMap;
+
+        extern(C)
+        wasm_trap_t* dfuncWrapper(void* env, wasmtime_caller_t* caller, const(wasmtime_val_t*) args, size_t nargs,
+                wasmtime_val_t* results, size_t nresults) nothrow {
+            alias ClassType = __traits(parent, Func);
+            staticMap!(Unqual,Parameters!Func) params;
+            auto cntxt = wasmtime_caller_context(caller);
+            ClassType c;
+            try {
+                if (!nargs) throw new Exception("Argument number mismatch!");
+                c = getFromWasmtimeVal!ClassType(args[0], cntxt);
+                size_t i = 1;
+                foreach (ref key; params) {
+                    if (i >= nargs) throw new Exception("Argument number mismatch!");
+                    key = getFromWasmtimeVal!(typeof(key))(args[i], cntxt);
+                    i++;
+                }
+            } catch (Exception e) {
+                // WasmTrap wt = new WasmTrap(Func.stringof);
+                WasmTrap wt = new WasmTrap(typeErrorMsg.idup);
+                wt.isInternalRef = true;
+                return wt.backend;
+            }
+
+            try {
+                static if (is(ReturnType!Func == void)) {
+                    __traits(child, c, Func)(params);
+                    if (nresults != 0) throw new Exception("Return value number mismatch!");
+                } else static if (is(ReturnType!Func == struct) && hasUDA!(ReturnType!Func, "WasmCfgStructByField")){
+                    auto v = __traits(child, c, Func)(params);
+                    size_t i;
+                    static foreach (field ; v.tupleof) {
+                        if (nresults <= i) throw new Exception("Return value number mismatch!");
+                        results[i] = convToWasmtimeVal(v.field, cntxt);
+                        i++;
+                    }
+                    if (nresults != i) throw new Exception("Return value number mismatch!");
+                } else {
+                    WasmtimeVal v = convToWasmtimeVal(__traits(child, c, Func)(params), cntxt);
+                    if (nresults != 1) throw new Exception("Return value number mismatch!");
+                    results[0] = v;
+                }
+            } catch (Exception e) {
+                string msg;
+                try {
+                    msg = e.toString();
+                } catch (Exception e2) {
+                    msg = excErrorMsg.idup;
+                }
+                WasmTrap wt = new WasmTrap(msg);
+                wt.isInternalRef = true;
+                return wt.backend;
+            }
+            return null;
+        }
+        WasmtimeFunc result = new WasmtimeFunc();
+        result.context = c;
+        result.callbackRef = &dfuncWrapper;
+
+        staticMap!(Unqual,Parameters!Func) params;
+        wasm_valtype_t*[] wasmArgs, wasmRes;
+        wasm_valtype_vec_t wasmArgsV, wasmResV;
+        foreach (ref key; params) {
+            wasmArgs ~= toWasmValtype!(typeof(key))();
+        }
+        if (wasmArgs.length) wasm_valtype_vec_new(&wasmArgsV, wasmArgs.length, wasmArgs.ptr);
+        else wasm_valtype_vec_new_empty(&wasmArgsV);
+        static if (is(ReturnType!Func == void)) {
+            wasm_valtype_vec_new_empty(&wasmResV);
+        } else {
+            wasmRes ~= toWasmValtype!(ReturnType!Func)();
+            wasm_valtype_vec_new(&wasmResV, wasmRes.length, wasmRes.ptr);
+        }
+        wasm_functype_t* funcType = wasm_functype_new(&wasmArgsV, &wasmResV);
+        wasmtime_func_new(c.backend, funcType, result.callbackRef, env, finalizer, &result.backend);
+        return result;
+    }
     package this() @nogc nothrow {}
     this(WasmtimeContext c, WasmFunctype type, WasmtimeFuncCallback callback, void* env, wasmFinalizerFuncT finalizer) 
             @nogc nothrow {
@@ -1834,6 +1942,13 @@ class WasmtimeFunc {
         if (error) result.error = new WasmtimeError(error);
         return result;
     }
+    /// Returns the extern associated with this function.
+    final WasmtimeExtern toExtern() @safe @nogc nothrow {
+        WasmtimeExtern result;
+        result.kind = WasmExternkind.Func;
+        result.of.func = backend;
+        return result;
+    }
 }
 ///Implementation native stuct, with no C API equilavance.
 ///Created to make return value handling easier.
@@ -1880,6 +1995,23 @@ class WasmtimeGlobal {
         if (error) return new WasmtimeError(error);
         return null;
     }
+}
+/**
+ * Builds up the correct environment requried by the module.
+ * Params:
+ *   mod = The module that needs the environment.
+ *   symbols = The imported symbols. First dimension is module name, second is symbol name.
+ * Returns: An array with the elements from `symbols` ordered in a way required by the module.
+ */
+WasmtimeExtern[] buildCorrectEnvironment(WasmtimeModule mod, WasmtimeExtern[string][string] symbols) {
+    WasmtimeExtern[] result;
+    WasmImporttypeVec imports = mod.imports;
+    for (sizediff_t i ; i < imports.backend.size ; i++) {
+        wasm_importtype_t* imp = imports.backend.data[i];
+        auto modName = wasm_importtype_module(imp), name = wasm_importtype_name(imp);
+        result ~= symbols[modName.data[0..modName.size]][name.data[0..name.size]];
+    }
+    return result;
 }
 class WasmtimeInstance {
     static wasm_trap_t* lastTrap;

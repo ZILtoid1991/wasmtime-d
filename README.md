@@ -64,6 +64,29 @@ dFuncAsExtern.kind = WasmExternkind.Func;
 dFuncAsExtern.of.func = dFunc.backend;
 ```
 
+Environment required by the module can be built as the example here shows it:
+
+```d
+WasmtimeFunc[] funcs = [
+    WasmtimeFunc.createFuncBinding!(add)(context), WasmtimeFunc.createFuncBinding!(sub)(context),
+    WasmtimeFunc.createFuncBinding!(mul)(context), WasmtimeFunc.createFuncBinding!(div)(context),
+    WasmtimeFunc.createFuncBinding!(writeInt)(context), WasmtimeFunc.createFuncBinding!(writeDouble)(context),
+    WasmtimeFunc.createMethodBinding!(TestClass.foo)(context), WasmtimeFunc.createMethodBinding!(TestClass.bar)
+    (context), WasmtimeFunc.createFuncBinding!(getClassRef)(context)
+];
+imports["math"]["add"] = funcs[0].toExtern();
+imports["math"]["sub"] = funcs[1].toExtern();
+imports["math"]["mul"] = funcs[2].toExtern();
+imports["math"]["div"] = funcs[3].toExtern();
+imports["display"]["writeInt"] = funcs[4].toExtern();
+imports["display"]["writeDouble"] = funcs[5].toExtern();
+imports["classreftest"]["foo"] = funcs[6].toExtern();
+imports["classreftest"]["bar"] = funcs[7].toExtern();
+imports["classreftest"]["getClassRef"] = funcs[8].toExtern();
+WasmTrap trap;
+WasmtimeInstance instance = new WasmtimeInstance(context, mod, buildCorrectEnvironment(mod, imports));
+```
+
 Creating a Wasmtime instance follows as:
 
 ```d
@@ -79,7 +102,13 @@ WasmtimeFunc wasmentrypoint = new WasmtimeFunc(context, run.of.func);
 auto funcResult = wasmentrypoint(0);
 ```
 
-(Manual binding is still available if needed.)
+(Manual binding is still available if needed, e.g. variadic arguments.)
+
+# D Language examples
+
+Examples in the `examples` folder are distributed freely with this library, and can be compiled with the command `ldc2 -mtriple=wasm32-unknown-unknown-wasm -betterC -L-allow-undefined <filename>`.
+
+`.examples` folder should contain the testcases that came with wasmtime.
 
 # Roadmap
 
@@ -90,5 +119,5 @@ auto funcResult = wasmentrypoint(0);
 ## Things need to be done
 
 * Shared memory handling.
-* Member function binding generation.
+* Member function binding generation (untested).
 * Asynchronous functions.

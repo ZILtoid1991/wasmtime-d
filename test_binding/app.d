@@ -14,9 +14,13 @@ int main(string[] args) {
     if (args.length <= 1) args ~= "";
     switch (args[1]) {
         case "hellod": return helloDMain();
+        case "hellod2": return helloDMain2();
         case "gcd": return gcdMain(args[2..$]);
+        case "gcd2": return gcdMain2(args[2..$]);
         case "linearMemory": return linearMemoryMain();
         case "linking": return linkingMain();
+        case "environment": return environmentMain();
+        case "classRef": return classRefMain(args[2..$]);
         default: return helloMain();
     }
 }
@@ -188,6 +192,80 @@ int helloDMain() {
     writeln("All finished!");
     return 0;
 }
+int helloDMain2() {
+    writeln("Initializing...");
+    WasmEngine engine = new WasmEngine();
+    assert(engine.backend != null);
+
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    assert(store.backend != null);
+    WasmtimeContext context = store.context();
+
+    File file = File("examples/hellowasmtime.wasm", "r");
+    ulong size = file.size();
+    WasmByteVec wasm = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wasm.backend.data[0..wasm.backend.size]);
+    file.close();
+
+    // WasmByteVec wasm = new WasmByteVec();
+    // WasmtimeError error = wat2wasm(cast(const(char)[])wat.backend.data[0..wat.backend.size], wasm);
+    // if (error) {
+        // writeln("Failed to parse WAT. Error message:");
+        // writeln(error);
+        // return 1;
+    // }
+
+    writeln("Compiling module...");
+    WasmtimeModule mod;
+    WasmtimeError error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+
+    writeln("Creating callback...");
+    WasmtimeFunc hello = WasmtimeFunc.createFuncBinding!(helloCallbackD)(context);
+
+    writeln("Instantiating module...");
+    WasmTrap trap;
+    WasmtimeInstance instance;
+    WasmtimeExtern _import;
+    _import.kind = WasmExternkind.Func;
+    _import.of.func = hello.backend;
+    instance = new WasmtimeInstance(context, mod, [_import]);
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("Extracting export...");
+    WasmtimeExtern run = instance.exportGet("_start");
+    assert(run.kind == WasmExternkind.Func);
+
+    writeln("Calling export...");
+    WasmtimeFunc wasmentry = new WasmtimeFunc(context, run.of.func);
+    auto funcResult = wasmentry(0);
+    if (funcResult.error || funcResult.trap) {
+        writeln("Failed to compile module. Error message:");
+        if (funcResult.error) writeln(funcResult.error);
+        if (funcResult.trap) {
+            wasmtime_trap_code_t code;
+            funcResult.trap.code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("All finished!");
+    return 0;
+}
 //end of modified hello world example
 //begin of GCD example
 int gcdMain(string[] args) {
@@ -220,6 +298,71 @@ int gcdMain(string[] args) {
         return 1;
     }
     
+    WasmtimeInstance instance;
+    instance = new WasmtimeInstance(context, mod, []);
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    WasmtimeExtern run = instance.exportGet("gcd");
+    assert(run.kind == WasmExternkind.Func);
+
+    WasmtimeFunc gcdFunc = new WasmtimeFunc(context, run.of.func);
+    int a = args[0].to!int;
+    int b = args[1].to!int;
+    WasmtimeResult gcdRes = gcdFunc(1, a, b);
+    if (gcdRes.error || gcdRes.trap) {
+        writeln("Failed to compile module. Error message:");
+        if (gcdRes.error) writeln(gcdRes.error);
+        if (gcdRes.trap) {
+            wasmtime_trap_code_t code;
+            gcdRes.trap.code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+    assert(gcdRes.retVal.length);
+    assert(gcdRes.retVal[0].kind == WasmtimeValkind.I32);
+    writeln("Result: ", gcdRes.retVal[0].of.i32);
+    return 0;
+}
+int gcdMain2(string[] args) {
+    assert(args.length >= 2, "Not enough arguments.");
+    WasmEngine engine = new WasmEngine();
+    assert(engine.backend != null);
+
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    assert(store.backend != null);
+    WasmtimeContext context = store.context();
+
+    File file = File("examples/gcd.wasm", "r");
+    ulong size = file.size();
+    WasmByteVec wasm = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wasm.backend.data[0..wasm.backend.size]);
+
+    // WasmByteVec wasm = new WasmByteVec();
+    WasmtimeError error;// = wat2wasm(cast(const(char)[])wat.backend.data[0..wat.backend.size], wasm);
+    // if (error) {
+        // writeln("Failed to parse WAT. Error message:");
+        // writeln(error);
+        // return 1;
+    // }
+
+    WasmtimeModule mod;
+    error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+
     WasmtimeInstance instance;
     instance = new WasmtimeInstance(context, mod, []);
     if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
@@ -434,6 +577,175 @@ int linkingMain() {
     WasmtimeResult result = runFunc(0);
     assert(!result.error, result.error.toString());
     assert(!result.trap, result.trap.toString());
+
+    return 0;
+}
+int add(int a, int b) {
+    return a + b;
+}
+int sub(int a, int b) {
+    return a - b;
+}
+int mul(int a, int b) {
+    return a * b;
+}
+int div(int a, int b) {
+    return a / b;
+}
+void writeInt(int var) {
+    writeln("The value from the WASM script is: ", var);
+}
+void writeDouble(double var) {
+    writeln("The value from the WASM script is: ", var);
+}
+int environmentMain() {
+    WasmEngine engine = new WasmEngine();
+    assert(engine.backend != null);
+
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    assert(store.backend != null);
+    WasmtimeContext context = store.context();
+
+    File file = File("examples/environment.wasm", "r");
+    ulong size = file.size();
+    WasmByteVec wasm = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wasm.backend.data[0..wasm.backend.size]);
+
+    WasmtimeModule mod;
+    WasmtimeError error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+    WasmtimeFunc[] funcs = [
+        WasmtimeFunc.createFuncBinding!(add)(context), WasmtimeFunc.createFuncBinding!(sub)(context),
+        WasmtimeFunc.createFuncBinding!(mul)(context), WasmtimeFunc.createFuncBinding!(div)(context),
+        WasmtimeFunc.createFuncBinding!(writeInt)(context)
+    ];
+    WasmtimeExtern[string][string] imports;
+    imports["math"]["add"] = funcs[0].toExtern();
+    imports["math"]["sub"] = funcs[1].toExtern();
+    imports["math"]["mul"] = funcs[2].toExtern();
+    imports["math"]["div"] = funcs[3].toExtern();
+    imports["display"]["writeInt"] = funcs[4].toExtern();
+    WasmTrap trap;
+    WasmtimeInstance instance = new WasmtimeInstance(context, mod, buildCorrectEnvironment(mod, imports));
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+    WasmtimeExtern run = instance.exportGet("_start");
+    assert(run.kind == WasmExternkind.Func);
+    WasmtimeFunc wasmentry = new WasmtimeFunc(context, run.of.func);
+    auto funcResult = wasmentry(0);
+    if (funcResult.error || funcResult.trap) {
+        writeln("Failed to compile module. Error message:");
+        if (funcResult.error) writeln(funcResult.error);
+        if (funcResult.trap) {
+            wasmtime_trap_code_t code;
+            funcResult.trap.code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("All finished!");
+
+    return 0;
+}
+class TestClass {
+    int var1;
+    int var2;
+    this (int var1, int var2) {
+        this.var1 = var1;
+        this.var2 = var2;
+    }
+    double foo() {
+        return cast(double)var1 / cast(double)var2;
+    }
+    double bar(int a, int b) {
+        var1 = a;
+        var2 = b;
+        return foo();
+    }
+}
+TestClass tc;
+TestClass getClassRef() { return tc; }
+int classRefMain(string[] args) {
+    assert(args.length >= 2, "Not enough arguments.");
+    WasmEngine engine = new WasmEngine();
+    assert(engine.backend != null);
+
+    tc = new TestClass(to!int(args[0]), to!int(args[1]));
+
+    WasmtimeStore store = new WasmtimeStore(engine, null, null);
+    assert(store.backend != null);
+    WasmtimeContext context = store.context();
+
+    File file = File("examples/classref.wasm", "r");
+    ulong size = file.size();
+    WasmByteVec wasm = new WasmByteVec(cast(size_t)size);
+    file.rawRead(wasm.backend.data[0..wasm.backend.size]);
+
+    WasmtimeModule mod;
+    WasmtimeError error = WasmtimeModule.create(engine, cast(ubyte[])wasm.backend.data[0..wasm.backend.size], mod);
+    if (error) {
+        writeln("Failed to compile module. Error message:");
+        writeln(error);
+        return 1;
+    }
+    WasmtimeFunc[] funcs = [
+        WasmtimeFunc.createFuncBinding!(add)(context), WasmtimeFunc.createFuncBinding!(sub)(context),
+        WasmtimeFunc.createFuncBinding!(mul)(context), WasmtimeFunc.createFuncBinding!(div)(context),
+        WasmtimeFunc.createFuncBinding!(writeInt)(context), WasmtimeFunc.createFuncBinding!(writeDouble)(context),
+        WasmtimeFunc.createMethodBinding!(TestClass.foo)(context), WasmtimeFunc.createMethodBinding!(TestClass.bar)
+        (context), WasmtimeFunc.createFuncBinding!(getClassRef)(context)
+    ];
+    WasmtimeExtern[string][string] imports;
+    imports["math"]["add"] = funcs[0].toExtern();
+    imports["math"]["sub"] = funcs[1].toExtern();
+    imports["math"]["mul"] = funcs[2].toExtern();
+    imports["math"]["div"] = funcs[3].toExtern();
+    imports["display"]["writeInt"] = funcs[4].toExtern();
+    imports["display"]["writeDouble"] = funcs[5].toExtern();
+    imports["classreftest"]["foo"] = funcs[6].toExtern();
+    imports["classreftest"]["bar"] = funcs[7].toExtern();
+    imports["classreftest"]["getClassRef"] = funcs[8].toExtern();
+    WasmTrap trap;
+    WasmtimeInstance instance = new WasmtimeInstance(context, mod, buildCorrectEnvironment(mod, imports));
+    if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
+        writeln("Failed to instantiate. Error message:");
+        if (WasmtimeInstance.lastError) writeln(new WasmtimeError(WasmtimeInstance.lastError).toString);
+        if (WasmtimeInstance.lastTrap) {
+            wasmtime_trap_code_t code;
+            new WasmTrap(WasmtimeInstance.lastTrap).code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+    WasmtimeExtern run = instance.exportGet("_start");
+    assert(run.kind == WasmExternkind.Func);
+    WasmtimeFunc wasmentry = new WasmtimeFunc(context, run.of.func);
+    auto funcResult = wasmentry(0);
+    if (funcResult.error || funcResult.trap) {
+        writeln("Failed to compile module. Error message:");
+        if (funcResult.error) writeln(funcResult.error);
+        if (funcResult.trap) {
+            wasmtime_trap_code_t code;
+            funcResult.trap.code(code);
+            writeln("Code: ", code);
+        }
+        return 1;
+    }
+
+    writeln("All finished!");
 
     return 0;
 }
