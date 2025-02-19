@@ -677,7 +677,10 @@ class TestClass {
     }
 }
 TestClass tc;
-TestClass getClassRef() { return tc; }
+TestClass getClassRef() {
+    writeln("Passing object to WASM as externref");
+    return tc;
+}
 int classRefMain(string[] args) {
     assert(args.length >= 2, "Not enough arguments.");
     WasmEngine engine = new WasmEngine();
@@ -701,6 +704,7 @@ int classRefMain(string[] args) {
         writeln(error);
         return 1;
     }
+    writeln("Creating function and method bindings");
     WasmtimeFunc[] funcs = [
         WasmtimeFunc.createFuncBinding!(add)(context), WasmtimeFunc.createFuncBinding!(sub)(context),
         WasmtimeFunc.createFuncBinding!(mul)(context), WasmtimeFunc.createFuncBinding!(div)(context),
@@ -708,6 +712,7 @@ int classRefMain(string[] args) {
         WasmtimeFunc.createMethodBinding!(TestClass.foo)(context), WasmtimeFunc.createMethodBinding!(TestClass.bar)
         (context), WasmtimeFunc.createFuncBinding!(getClassRef)(context)
     ];
+    writeln("Mapping import symbols");
     WasmtimeExtern[string][string] imports;
     imports["math"]["add"] = funcs[0].toExtern();
     imports["math"]["sub"] = funcs[1].toExtern();
@@ -719,6 +724,7 @@ int classRefMain(string[] args) {
     imports["classreftest"]["bar"] = funcs[7].toExtern();
     imports["classreftest"]["getClassRef"] = funcs[8].toExtern();
     WasmTrap trap;
+    writeln("Creating instance");
     WasmtimeInstance instance = new WasmtimeInstance(context, mod, buildCorrectEnvironment(mod, imports));
     if (WasmtimeInstance.lastError || WasmtimeInstance.lastTrap) {
         writeln("Failed to instantiate. Error message:");
@@ -732,6 +738,7 @@ int classRefMain(string[] args) {
     }
     WasmtimeExtern run = instance.exportGet("_start");
     assert(run.kind == WasmExternkind.Func);
+    writeln("Executing script");
     WasmtimeFunc wasmentry = new WasmtimeFunc(context, run.of.func);
     auto funcResult = wasmentry(0);
     if (funcResult.error || funcResult.trap) {

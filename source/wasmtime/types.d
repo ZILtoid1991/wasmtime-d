@@ -291,9 +291,17 @@ struct wasmtime_extern_t {
     wasmtime_extern_union_t of;
 }
 
-struct wasmtime_anyref_t {}
+struct wasmtime_anyref_t {
+    uint64_t store_id;
+    uint32_t __private1;
+    uint32_t __private2;
+}
 
-struct wasmtime_externref_t {}
+struct wasmtime_externref_t {
+    uint64_t store_id;
+    uint32_t __private1;
+    uint32_t __private2;
+}
 
 alias wasmtime_valkind_t = uint8_t;
 
@@ -305,7 +313,7 @@ union wasmtime_valunion_t {
     float32_t f32;
     float64_t f64;
     wasmtime_anyref_t* anyref;
-    wasmtime_externref_t* externref;
+    wasmtime_externref_t externref;
     wasmtime_func_t funcref;
     wasmtime_v128 v128;
 }

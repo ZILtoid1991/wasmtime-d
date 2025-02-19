@@ -1,3 +1,8 @@
+# v0.2.0
+
+* Fixed library implementation issues related to `externref` types.
+* Validated working and fixed issues regarding of automatic method bindings.
+
 # v0.2.0-beta
 
 * Fixed a bug with `WasmtimeFunc.createFuncBinding`, which caused D functions with arguments to fail.

@@ -1541,32 +1541,33 @@ class WasmtimeAnyref {
         return wasmtime_anyref_i31_get_s(context.backend, backend, dst);
     }
 }
-class WasmtimeExternref {
-    wasmtime_externref_t* backend;
-    WasmtimeContext context;    ///Currently it's there due to the functions, might need to be changed
-    bool isInternalRef;
-    this(WasmtimeContext c, void* data, wasmFinalizerFuncT finalizer) @nogc nothrow {
-        backend = wasmtime_externref_new(c.backend, data, finalizer);
-        this.context = c;
-    }
-    this(WasmtimeContext c, uint32_t raw) @nogc nothrow {
-        backend = wasmtime_externref_from_raw(c.backend, raw);
-        context = c;
-    }
-    this(WasmtimeExternref other) {
-        backend = wasmtime_externref_clone(other.context.backend, other.backend);
-        context = other.context;
-    }
-    ~this() @nogc nothrow {
-        if (!isInternalRef) wasmtime_externref_delete(context.backend, backend);
-    }
-    void* data() @nogc nothrow {
-        return wasmtime_externref_data(context.backend, backend);
-    }
-    uint32_t toRaw() @nogc nothrow {
-        return wasmtime_externref_to_raw(context.backend, backend);
-    }
-}
+///Note to self: might need to be changed (API change between versions?)
+// class WasmtimeExternref {
+//     wasmtime_externref_t backend;
+//     WasmtimeContext context;    ///Currently it's there due to the functions, might need to be changed
+//     bool isInternalRef;
+//     this(WasmtimeContext c, void* data, wasmFinalizerFuncT finalizer) @nogc nothrow {
+//         wasmtime_externref_new(c.backend, data, finalizer, &backend);
+//         this.context = c;
+//     }
+//     this(WasmtimeContext c, uint32_t raw) @nogc nothrow {
+//         backend = wasmtime_externref_from_raw(c.backend, raw);
+//         context = c;
+//     }
+//     this(WasmtimeExternref other) {
+//         backend = wasmtime_externref_clone(other.context.backend, other.backend);
+//         context = other.context;
+//     }
+//     ~this() @nogc nothrow {
+//         if (!isInternalRef) wasmtime_externref_delete(context.backend, backend);
+//     }
+//     void* data() @nogc nothrow {
+//         return wasmtime_externref_data(context.backend, backend);
+//     }
+//     uint32_t toRaw() @nogc nothrow {
+//         return wasmtime_externref_to_raw(context.backend, backend);
+//     }
+// }
 alias WasmtimeValunion = wasmtime_valunion_t;
 alias WasmtimeValRaw = wasmtime_val_raw_t;
 alias WasmtimeVal = wasmtime_val_t;
@@ -1601,11 +1602,17 @@ WasmtimeVal convToWasmtimeVal(T)(T val, wasmtime_context_t* context) @nogc nothr
                     wasmtime_valunion_t(v128 : *cast(wasmtime_v128*)(cast(void*)&val)));
         } else static assert(0, "Struct must be of exactly the size of 4, 8, or 16 bytes!");
     } else static if (is(T == class) || is(T == interface)) {   //treat classes and interfaces as external reference
-        return WasmtimeVal(WasmtimeValkind.Externref, wasmtime_valunion_t(
-                externref : wasmtime_externref_new(context, cast(void*)val, null)));
+        // return WasmtimeVal(WasmtimeValkind.Externref, wasmtime_valunion_t(
+                // externref : wasmtime_externref_new(context, cast(void*)val, null)));
+        WasmtimeVal result;
+        result.kind = WasmtimeValkind.Externref;
+        assert(wasmtime_externref_new(context, cast(void*)val, null, &result.of.externref));
+        return result;
     } else static if (is(T == struct)) {                        //treat structs as memory blobs
-        return WasmtimeVal(WasmtimeValkind.Externref, wasmtime_valunion_t
-                (externref : wasmtime_externref_new(context, &val, null)));
+        WasmtimeVal result;
+        result.kind = WasmtimeValkind.Externref;
+        assert(wasmtime_externref_new(context, cast(void*)val, null, &result.of.externref));
+        return result;
     }
     //throw new Exception("Type mismatch!");
 }
@@ -1635,9 +1642,9 @@ T getFromWasmtimeVal(T)(WasmtimeVal val, wasmtime_context_t* context) @nogc noth
             return *cast(T*)(cast(void*)&val.of.v128);
         } else static assert(0, "Struct must be of exactly the size of 4, 8, or 16 bytes!");
     } else static if (is(T == class) || is(T == interface)) {    //treat classes and interfaces as external reference
-        return cast(T)wasmtime_externref_data(context, val.of.externref);
+        return cast(T)wasmtime_externref_data(context, &val.of.externref);
     } else static if (is(T == struct)) {
-        return *cast(T*)wasmtime_externref_data(context, val.of.externref);
+        return *cast(T*)wasmtime_externref_data(context, &val.of.externref);
     }
     //throw new Exception("Type mismatch!");
 }
@@ -1783,10 +1790,11 @@ class WasmtimeFunc {
         import std.traits:Parameters, ReturnType;
         import std.meta:staticMap;
 
+        alias ClassType = __traits(parent, Func);
         extern(C)
         wasm_trap_t* dfuncWrapper(void* env, wasmtime_caller_t* caller, const(wasmtime_val_t*) args, size_t nargs,
                 wasmtime_val_t* results, size_t nresults) nothrow {
-            alias ClassType = __traits(parent, Func);
+
             staticMap!(Unqual,Parameters!Func) params;
             auto cntxt = wasmtime_caller_context(caller);
             ClassType c;
@@ -1844,6 +1852,7 @@ class WasmtimeFunc {
         staticMap!(Unqual,Parameters!Func) params;
         wasm_valtype_t*[] wasmArgs, wasmRes;
         wasm_valtype_vec_t wasmArgsV, wasmResV;
+        wasmArgs ~= toWasmValtype!ClassType();
         foreach (ref key; params) {
             wasmArgs ~= toWasmValtype!(typeof(key))();
         }

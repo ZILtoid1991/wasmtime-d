@@ -370,7 +370,7 @@ extern(C) @nogc nothrow {
     alias pwasmtime_context_get_fuel = wasmtime_error_t* function(const(wasmtime_context_t)* context, uint64_t* fuel);
     alias pwasmtime_context_set_wasi = wasmtime_error_t* function(wasmtime_context_t* context, wasi_config_t* wasi);
     alias pwasmtime_context_set_epoch_deadline = void function(wasmtime_context_t* context, uint64_t ticks_beyond_current);
-    alias pwasmtime_store_epoch_deadline_callback = void function(wasmtime_store_t* store, wasmSEDCFuncT func /* extern(C) wasmtime_error_t* function(wasmtime_context_t* context, void* data, uint64_t* epoch_deadline_delta, wasmtime_update_deadline_kind_t* update_kind) func */, void *data, wasmFinalizerFuncT);
+    alias pwasmtime_store_epoch_deadline_callback = void function(wasmtime_store_t* store, wasmSEDCFuncT func, void *data, wasmFinalizerFuncT);
     alias pwasmtime_extern_delete = void function(wasmtime_extern_t* val);
     alias pwasmtime_extern_type = wasm_externtype_t* function(wasmtime_context_t* context, wasmtime_extern_t* val);
     alias pwasmtime_anyref_clone = wasmtime_anyref_t* function(wasmtime_context_t* context, wasmtime_anyref_t* _ref);
@@ -380,7 +380,7 @@ extern(C) @nogc nothrow {
     alias pwasmtime_anyref_from_i31 = wasmtime_anyref_t* function(wasmtime_context_t* context, uint32_t i31val);
     alias pwasmtime_anyref_i31_get_u = bool function(wasmtime_context_t* context, wasmtime_anyref_t* anyref, uint32_t* dst);
     alias pwasmtime_anyref_i31_get_s = bool function(wasmtime_context_t* context, wasmtime_anyref_t* anyref, int32_t* dst);
-    alias pwasmtime_externref_new = wasmtime_externref_t* function(wasmtime_context_t *context, void* data, wasmFinalizerFuncT);
+    alias pwasmtime_externref_new = bool function(wasmtime_context_t *context, void* data, wasmFinalizerFuncT, wasmtime_externref_t* _out);
     alias pwasmtime_externref_data = void* function(wasmtime_context_t* context, wasmtime_externref_t* data);
     alias pwasmtime_externref_clone = wasmtime_externref_t* function(wasmtime_context_t* context, wasmtime_externref_t* _ref);
     alias pwasmtime_externref_delete = void function(wasmtime_context_t* context, wasmtime_externref_t* _ref);

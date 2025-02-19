@@ -105,6 +105,6 @@ enum WasmtimeValkind : wasmtime_valkind_t {
     F64,
     V128,
     Funcref,
-    Anyref,
     Externref,
+    Anyref,
 }
