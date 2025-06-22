@@ -2,6 +2,9 @@ import ldc.attributes;
 
 extern(C): // disable D mangling
 
+
+//Note: this is not working as of writing this, there is currently no way of getting externref types working with D,
+//due to a lack of support for it on the compiler side.
 struct TestClass {}
 
 @llvmAttr("wasm-import-module", "classreftest") {
