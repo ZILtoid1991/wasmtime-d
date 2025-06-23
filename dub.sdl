@@ -5,6 +5,15 @@ copyright "Copyright © 2024, ZILtoid1991"
 license "Boost"
 targetType "library"
 dependency "bindbc-loader" version="*"
+configuration "default" {
+    targetType "library"
+}
+configuration "force_nogc" {
+    targetType "library"
+    dependency "numem" version="*"
+    dependency "numem:hookset-libc" version="*"
+    versions "WASMTIME_D_FORCE_NOGC"
+}
 subPackage {
     name "funcgen"
     targetType "executable"
