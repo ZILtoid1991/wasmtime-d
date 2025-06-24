@@ -1598,6 +1598,11 @@ struct WasmtimeFunc {
             } catch (Exception e) {
                 // WasmTrap wt = new WasmTrap(Func.stringof);
                 WasmTrap wt = new WasmTrap(typeErrorMsg);
+                version (WASMTIME_D_FORCE_NOGC) {
+                    import numem.core.exception;
+                    NuException ne = cast(NuException)e;
+                    if (ne !is null) ne.free();
+                }
                 return wt.backend;
             }
 
@@ -1625,6 +1630,11 @@ struct WasmtimeFunc {
                     msg = e.toString();
                 } catch (Exception e2) {
                     msg = excErrorMsg;
+                }
+                version (WASMTIME_D_FORCE_NOGC) {
+                    import numem.core.exception;
+                    NuException ne = cast(NuException)e;
+                    if (ne !is null) ne.free();
                 }
                 WasmTrap wt = WasmTrap(msg);
                 return wt.backend;
@@ -1688,7 +1698,12 @@ struct WasmtimeFunc {
                 }
             } catch (Exception e) {
                 // WasmTrap wt = new WasmTrap(Func.stringof);
-                WasmTrap wt = WasmTrap(typeErrorMsg.idup);
+                WasmTrap wt = WasmTrap(typeErrorMsg);
+                version (WASMTIME_D_FORCE_NOGC) {
+                    import numem.core.exception;
+                    NuException ne = cast(NuException)e;
+                    if (ne !is null) ne.free();
+                }
                 return wt.backend;
             }
 
@@ -1715,7 +1730,12 @@ struct WasmtimeFunc {
                 try {
                     msg = e.toString();
                 } catch (Exception e2) {
-                    msg = excErrorMsg.idup;
+                    msg = excErrorMsg;
+                }
+                version (WASMTIME_D_FORCE_NOGC) {
+                    import numem.core.exception;
+                    NuException ne = cast(NuException)e;
+                    if (ne !is null) ne.free();
                 }
                 WasmTrap wt = WasmTrap(msg);
                 return wt.backend;
